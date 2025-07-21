@@ -2,22 +2,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Threading;
-
-using System.ComponentModel;
-using System.Collections.ObjectModel;
 
 using Microsoft.Win32;
 
@@ -113,9 +101,9 @@ namespace YoloPoseRun
 
                 progressManager.Clear();
 
-                initiarizeTask(textBox_batchSize_GPU0, out yoloPose_GPU0, out task_GPU0, 0);
-                initiarizeTask(textBox_batchSize_GPU1, out yoloPose_GPU1, out task_GPU1, 1);
-                initiarizeTask(textBox_batchSize_CPU, out yoloPose_CPU, out task_CPU, -1);
+                initializeTask(textBox_batchSize_GPU0, out yoloPose_GPU0, out task_GPU0, 0);
+                initializeTask(textBox_batchSize_GPU1, out yoloPose_GPU1, out task_GPU1, 1);
+                initializeTask(textBox_batchSize_CPU, out yoloPose_CPU, out task_CPU, -1);
 
                 if (yoloPose_GPU0 != null) progressManager.Add(yoloPose_GPU0, "GPU0");
                 if (yoloPose_GPU1 != null) progressManager.Add(yoloPose_GPU1, "GPU1");
@@ -152,13 +140,14 @@ namespace YoloPoseRun
             return System.IO.Path.Combine(System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)), System.IO.Path.GetFileName(path));
         }
 
-        private void initiarizeTask(TextBox textBox, out YoloPoseRunClass yoloPose, out Task task, int deviceID)
+        private void initializeTask(TextBox textBox, out YoloPoseRunClass yoloPose, out Task task, int deviceID)
         {
             if (int.TryParse(textBox.Text, out int batchSize) && batchSize > 0)
             {
-                yoloPose = new YoloPoseRunClass(srcFileQueue, textBox_modelFilePath.Text, deviceID);
+                yoloPose = new YoloPoseRunClass(srcFileQueue, textBox_modelFilePath.Text, deviceID,textBox_initializeLinesString.Text);
                 yoloPose.PredictTaskBatchSize = batchSize;
                 task = yoloPose.Run(tokenSource.Token);
+                
             }
             else
             {
@@ -232,6 +221,32 @@ namespace YoloPoseRun
                 }
 
             }, cancellationToken);
+        }
+
+        private void Button_getDefaultConfidence_Click(object sender, RoutedEventArgs e)
+        {
+            YoloPoseModelHandle y = new YoloPoseModelHandle("");
+            PoseKeyPoints k = new PoseKeyPoints(null,-1,"");
+            textBox_initializeLinesString.Text = y.ParamToTextLinesString()+"\r\n"+ k.ParamToTextLinesString();
+            y.Dispose();
+        }
+
+        private void Button_saveConfigAs_Click(object sender, RoutedEventArgs e)
+        {
+            SaveFileDialog sfd = new SaveFileDialog();
+            sfd.Filter = "TEXT|*.txt";
+            sfd.FileName = $"Param_{DateTime.Now:yyyyMMdd_HHmm}.ini";
+
+            if (sfd.ShowDialog() != true) return;
+
+            string inifilepath = sfd.FileName;
+            File.WriteAllText(inifilepath, ControlValuesToString.GetString(this));
+        }
+
+        private void Button_defaultUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            string inifilepath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_Param.ini");
+            File.WriteAllText(inifilepath, ControlValuesToString.GetString(this));
         }
     }
 

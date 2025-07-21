@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace YoloPoseRun
 {
@@ -11,10 +9,11 @@ namespace YoloPoseRun
         public Bbox Bbox;
         public PoseKeyPoints KeyPoints;
 
-        public PoseInfo(float[] outputArray, int startIndex)
+
+        public PoseInfo(float[] outputArray, int startIndex, string ConfidenceParameterLinesString)
         {
             Bbox = new Bbox(outputArray, startIndex);
-            KeyPoints = new PoseKeyPoints(outputArray, startIndex);
+            KeyPoints = new PoseKeyPoints(outputArray, startIndex, ConfidenceParameterLinesString);
         }
 
         static public string ToLineStringHeader()

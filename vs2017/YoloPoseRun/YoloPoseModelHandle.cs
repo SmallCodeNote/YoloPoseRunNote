@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-using System.IO;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Linq;
+using System.IO;
+
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -24,16 +22,65 @@ namespace YoloPoseRun
         private int modelOutputStride = 8400;
 
         public float ConfidenceThreshold = 0.16f;
+        public float OverlapBBoxThreshold = 0.8f;
+        public float OverlapTolsoThreshold = 0.8f;
+        public float OverlapShoulderThreshold = 0.8f;
 
-        public YoloPoseModelHandle(string modelfilePath, int deviceID = -1)
+        public string ConfidenceParameterLinesString = "";
+
+
+        public YoloPoseModelHandle(string modelfilePath, int deviceID = -1, string ConfidenceParameterLinesString = "")
         {
-            SetModel(modelfilePath,deviceID);
+            SetModel(modelfilePath, deviceID);
+            this.ConfidenceParameterLinesString = ConfidenceParameterLinesString;
         }
 
         public void Dispose()
         {
             if (session != null) session.Dispose();
             GC.SuppressFinalize(this);
+        }
+
+        public void InitializeParamFromTextLines(string LinesString)
+        {
+            InitializeParamFromTextLines(LinesString.Replace("\r\n", "\n").Trim('\n').Split('\n'));
+        }
+        public void InitializeParamFromTextLines(string[] Lines)
+        {
+            foreach (var line in Lines)
+            {
+                var parts = line.Split('\t');
+                if (parts.Length != 2)
+                    continue;
+
+                string key = parts[0];
+                if (!float.TryParse(parts[1], out float value))
+                    continue;
+
+                switch (key)
+                {
+                    case nameof(ConfidenceThreshold): ConfidenceThreshold = value; break;
+                    case nameof(OverlapBBoxThreshold): OverlapBBoxThreshold = value; break;
+                    case nameof(OverlapTolsoThreshold): OverlapTolsoThreshold = value; break;
+                    case nameof(OverlapShoulderThreshold): OverlapShoulderThreshold = value; break;
+                    default: break;
+                }
+            }
+        }
+
+        public string ParamToTextLinesString()
+        {
+            return string.Join("\r\n", ParamToTextLines());
+        }
+        public string[] ParamToTextLines()
+        {
+            return new string[]
+            {
+                $"{nameof(ConfidenceThreshold)}\t{ConfidenceThreshold}",
+                $"{nameof(OverlapBBoxThreshold)}\t{OverlapBBoxThreshold}",
+                $"{nameof(OverlapTolsoThreshold)}\t{OverlapTolsoThreshold}",
+                $"{nameof(OverlapShoulderThreshold)}\t{OverlapShoulderThreshold}"
+            };
         }
 
         public bool SetModel(string modelfilePath, int deviceID = -1)
@@ -214,10 +261,6 @@ namespace YoloPoseRun
             return PoseInfoRead(outputArray, confidenceThreshold);
         }
 
-        public float OverlapBBoxThreshold = 0.8f;
-        public float OverlapTolsoThreshold = 0.8f;
-        public float OverlapShoulderThreshold = 0.8f;
-
         public void SetOverlapThreshold(float OverlapBBoxThreshold, float OverlapTolsoThreshold, float OverlapShoulderThreshold)
         {
             this.OverlapBBoxThreshold = OverlapBBoxThreshold;
@@ -231,7 +274,7 @@ namespace YoloPoseRun
             List<PoseInfo> PoseInfos = new List<PoseInfo>();
             for (int i = 0; i < modelOutputStride; i++)
             {
-                PoseInfo pi = new PoseInfo(outputArray, i);
+                PoseInfo pi = new PoseInfo(outputArray, i, ConfidenceParameterLinesString);
                 if (pi.Bbox.Confidence >= confidenceThreshold)
                 {
                     if (PoseInfos.Count > 0)

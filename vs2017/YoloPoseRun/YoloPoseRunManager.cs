@@ -1,12 +1,10 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-
-using System.IO;
-
 using System.ComponentModel;
-using System.Collections.ObjectModel;
+using System.IO;
+using System.Runtime.CompilerServices;
 
 namespace YoloPoseRun
 {
@@ -125,7 +123,7 @@ namespace YoloPoseRun
 
         public static void getDebugInfo(string methodName, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
         {
-            Console.WriteLine($"-CALL: {methodName} - {Path.GetFileName(filePath)}:{lineNumber}");
+            Console.WriteLine($"[{DateTime.Now:HH:mm:dd.sss}] {Path.GetFileName(filePath)}:{lineNumber} - {methodName}");
         }
     }
 }

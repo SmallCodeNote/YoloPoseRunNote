@@ -1,23 +1,23 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
+using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using System.Threading;
+
 using OpenCvSharp;
 using OpenCvSharp.Extensions;
 
-using System.ComponentModel;
-
 namespace YoloPoseRun
 {
-    public class YoloPoseRunClass : INotifyPropertyChanged , IDisposable
+    public class YoloPoseRunClass : INotifyPropertyChanged, IDisposable
     {
         public int PredictTaskBatchSize = 256;
 
@@ -31,18 +31,22 @@ namespace YoloPoseRun
         VideoCapture videoSource;
         YoloPoseModelHandle yoloPoseModelHandle;
 
+        public string ConfidenceParameterLinesString;
+        public int DeviceID = -2;
+
         BlockingCollection<string> videoSourceFilePathQueue;
         string saveDirectoryPath = "";
 
-        public YoloPoseRunClass(BlockingCollection<string> videoSourceFilePathQueue, string modelFilePath, int deviceID)
+        public YoloPoseRunClass(BlockingCollection<string> videoSourceFilePathQueue, string modelFilePath, int deviceID,string ConfidenceParameterLinesString)
         {
             this.videoSourceFilePathQueue = videoSourceFilePathQueue;
+            this.DeviceID = deviceID;
 
             if (File.Exists(modelFilePath))
             {
-                yoloPoseModelHandle = new YoloPoseModelHandle(modelFilePath, deviceID);
-                yoloPoseModelHandle.SetOverlapThreshold(0.16f, 0.8f, 0.8f);
+                yoloPoseModelHandle = new YoloPoseModelHandle(modelFilePath, deviceID, ConfidenceParameterLinesString);
             }
+            this.ConfidenceParameterLinesString = ConfidenceParameterLinesString;
         }
 
         public void Dispose()
@@ -65,7 +69,7 @@ namespace YoloPoseRun
             }
         }
 
-        private string _videoSourceFilePath="...";
+        private string _videoSourceFilePath = "...";
         public string VideoSourceFilePath
         {
             get => _videoSourceFilePath;
@@ -96,6 +100,7 @@ namespace YoloPoseRun
                     string videoSourceFilePath = "";
                     while (!videoSourceFilePathQueue.IsCompleted)
                     {
+                        getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} TryTake");
                         if (videoSourceFilePathQueue.TryTake(out videoSourceFilePath, 100))
                         {
 
@@ -152,10 +157,9 @@ namespace YoloPoseRun
                             frameVideoMatQueue.Dispose();
 
                         }
-
-                        
-
+                        getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} LoopEnd");
                     }
+                    getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} Completed");
 
                     if (videoSource != null) { videoSource.Dispose(); targetFilename = ""; }
 
@@ -687,6 +691,11 @@ namespace YoloPoseRun
                     info.KeyPoints.drawBone(g);
                 }
             }
+        }
+
+        public static void getDebugInfo(string methodName, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
+        {
+            Console.WriteLine($"[{DateTime.Now:HH:mm:dd.sss}] {Path.GetFileName(filePath)}:{lineNumber} - {methodName}");
         }
 
     }

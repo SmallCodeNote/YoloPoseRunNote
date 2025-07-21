@@ -1,11 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
 using System.Drawing;
-using System.Drawing.Imaging;
 
 namespace YoloPoseRun
 {
@@ -28,6 +24,124 @@ namespace YoloPoseRun
         public KeyPoint KneeRight;
         public KeyPoint AnkleLeft;
         public KeyPoint AnkleRight;
+
+        public PoseKeyPoints(float[] output, int startIndex, string ConfidenceParameterLinesString)
+        {
+            if (output == null) return;
+
+            Nose = new KeyPoint(output, startIndex, 0);
+            EyeLeft = new KeyPoint(output, startIndex, 1);
+            EyeRight = new KeyPoint(output, startIndex, 2);
+            EarLeft = new KeyPoint(output, startIndex, 3);
+            EarRight = new KeyPoint(output, startIndex, 4);
+            ShoulderLeft = new KeyPoint(output, startIndex, 5);
+            ShoulderRight = new KeyPoint(output, startIndex, 6);
+            ElbowLeft = new KeyPoint(output, startIndex, 7);
+            ElbowRight = new KeyPoint(output, startIndex, 8);
+            WristLeft = new KeyPoint(output, startIndex, 9);
+            WristRight = new KeyPoint(output, startIndex, 10);
+            HipLeft = new KeyPoint(output, startIndex, 11);
+            HipRight = new KeyPoint(output, startIndex, 12);
+            KneeLeft = new KeyPoint(output, startIndex, 13);
+            KneeRight = new KeyPoint(output, startIndex, 14);
+            AnkleLeft = new KeyPoint(output, startIndex, 15);
+            AnkleRight = new KeyPoint(output, startIndex, 16);
+
+            InitializeParamFromTextLines(ConfidenceParameterLinesString);
+        }
+
+        public float confidenceLevel_Nose = 0.6f;
+        public float confidenceLevel_Head = 0.6f;
+        public float confidenceLevel_Eye = 0.6f;
+        public float confidenceLevel_Ear = 0.6f;
+        public float confidenceLevel_Shoulder = 0.6f;
+        public float confidenceLevel_Elbow = 0.6f;
+        public float confidenceLevel_Wrist = 0.6f;
+        public float confidenceLevel_Hip = 0.6f;
+        public float confidenceLevel_Knee = 0.6f;
+        public float confidenceLevel_Ankle = 0.6f;
+
+        public void setConfidenceLevel(float confidenceLevel)
+        {
+            confidenceLevel_Nose = confidenceLevel;
+            confidenceLevel_Head = confidenceLevel;
+            confidenceLevel_Eye = confidenceLevel;
+            confidenceLevel_Ear = confidenceLevel;
+            confidenceLevel_Shoulder = confidenceLevel;
+            confidenceLevel_Elbow = confidenceLevel;
+            confidenceLevel_Wrist = confidenceLevel;
+            confidenceLevel_Hip = confidenceLevel;
+            confidenceLevel_Knee = confidenceLevel;
+            confidenceLevel_Ankle = confidenceLevel;
+
+        }
+
+        public override string ToString()
+        {
+            return $"{Nose.Confidence:0.00}, {EyeLeft.Confidence:0.00}, {EyeRight.Confidence:0.00}, " +
+                   $"{EarLeft.Confidence:0.00}, {EarRight.Confidence:0.00}, {ShoulderLeft.Confidence:0.00}, " +
+                   $"{ShoulderRight.Confidence:0.00}, {ElbowLeft.Confidence:0.00}, {ElbowRight.Confidence:0.00}, " +
+                   $"{WristLeft.Confidence:0.00}, {WristRight.Confidence:0.00}, {HipLeft.Confidence:0.00}, " +
+                   $"{HipRight.Confidence:0.00}, {KneeLeft.Confidence:0.00}, {KneeRight.Confidence:0.00}, " +
+                   $"{AnkleLeft.Confidence:0.00}, {AnkleRight.Confidence:0.00}";
+        }
+
+        public void InitializeParamFromTextLines(string LinesString)
+        {
+            InitializeParamFromTextLines(LinesString.Replace("\r\n", "\n").Trim('\n').Split('\n'));
+        }
+
+        public void InitializeParamFromTextLines(string[] Lines)
+        {
+            foreach (var line in Lines)
+            {
+                var parts = line.Split('\t');
+                if (parts.Length != 2)
+                    continue;
+
+                string key = parts[0];
+                if (!float.TryParse(parts[1], out float value))
+                    continue;
+
+                switch (key)
+                {
+                    case nameof(confidenceLevel_Nose): confidenceLevel_Nose = value; break;
+                    case nameof(confidenceLevel_Head): confidenceLevel_Head = value; break;
+                    case nameof(confidenceLevel_Eye): confidenceLevel_Eye = value; break;
+                    case nameof(confidenceLevel_Ear): confidenceLevel_Ear = value; break;
+                    case nameof(confidenceLevel_Shoulder): confidenceLevel_Shoulder = value; break;
+                    case nameof(confidenceLevel_Elbow): confidenceLevel_Elbow = value; break;
+                    case nameof(confidenceLevel_Wrist): confidenceLevel_Wrist = value; break;
+                    case nameof(confidenceLevel_Hip): confidenceLevel_Hip = value; break;
+                    case nameof(confidenceLevel_Knee): confidenceLevel_Knee = value; break;
+                    case nameof(confidenceLevel_Ankle): confidenceLevel_Ankle = value; break;
+                    default: break;
+                }
+            }
+        }
+
+        public string ParamToTextLinesString()
+        {
+            return string.Join("\r\n", ParamToTextLines());
+        }
+
+        public string[] ParamToTextLines()
+        {
+            return new string[]
+            {
+                $"{nameof(confidenceLevel_Nose)}\t{confidenceLevel_Nose}",
+                $"{nameof(confidenceLevel_Head)}\t{confidenceLevel_Head}",
+                $"{nameof(confidenceLevel_Eye)}\t{confidenceLevel_Eye}",
+                $"{nameof(confidenceLevel_Ear)}\t{confidenceLevel_Ear}",
+                $"{nameof(confidenceLevel_Shoulder)}\t{confidenceLevel_Shoulder}",
+                $"{nameof(confidenceLevel_Elbow)}\t{confidenceLevel_Elbow}",
+                $"{nameof(confidenceLevel_Wrist)}\t{confidenceLevel_Wrist}",
+                $"{nameof(confidenceLevel_Hip)}\t{confidenceLevel_Hip}",
+                $"{nameof(confidenceLevel_Knee)}\t{confidenceLevel_Knee}",
+                $"{nameof(confidenceLevel_Ankle)}\t{confidenceLevel_Ankle}"
+            };
+        }
+
 
         private float KeyPointAngle(KeyPoint pA0, float ConfidenceA0, KeyPoint pA1, float ConfidenceA1,
                                     KeyPoint pB0, float ConfidenceB0, KeyPoint pB1, float ConfidenceB1)
@@ -136,8 +250,6 @@ namespace YoloPoseRun
             {
                 return new KeyPoint(p2.X, p2.Y, p2.Confidence);
             }
-
-
             return new KeyPoint();
         }
 
@@ -245,52 +357,7 @@ namespace YoloPoseRun
             }
         }
 
-        public float confidenceLevel_Nose = 0.6f;
-        public float confidenceLevel_Head = 0.6f;
-        public float confidenceLevel_Eye = 0.6f;
-        public float confidenceLevel_Ear = 0.6f;
-        public float confidenceLevel_Shoulder = 0.6f;
-        public float confidenceLevel_Elbow = 0.6f;
-        public float confidenceLevel_Wrist = 0.6f;
-        public float confidenceLevel_Hip = 0.6f;
-        public float confidenceLevel_Knee = 0.6f;
-        public float confidenceLevel_Ankle = 0.6f;
 
-        public void setConfidenceLevel(float confidenceLevel)
-        {
-            confidenceLevel_Nose = confidenceLevel;
-            confidenceLevel_Head = confidenceLevel;
-            confidenceLevel_Eye = confidenceLevel;
-            confidenceLevel_Ear = confidenceLevel;
-            confidenceLevel_Shoulder = confidenceLevel;
-            confidenceLevel_Elbow = confidenceLevel;
-            confidenceLevel_Wrist = confidenceLevel;
-            confidenceLevel_Hip = confidenceLevel;
-            confidenceLevel_Knee = confidenceLevel;
-            confidenceLevel_Ankle = confidenceLevel;
-
-        }
-
-        public PoseKeyPoints(float[] output, int startIndex)
-        {
-            Nose = new KeyPoint(output, startIndex, 0);
-            EyeLeft = new KeyPoint(output, startIndex, 1);
-            EyeRight = new KeyPoint(output, startIndex, 2);
-            EarLeft = new KeyPoint(output, startIndex, 3);
-            EarRight = new KeyPoint(output, startIndex, 4);
-            ShoulderLeft = new KeyPoint(output, startIndex, 5);
-            ShoulderRight = new KeyPoint(output, startIndex, 6);
-            ElbowLeft = new KeyPoint(output, startIndex, 7);
-            ElbowRight = new KeyPoint(output, startIndex, 8);
-            WristLeft = new KeyPoint(output, startIndex, 9);
-            WristRight = new KeyPoint(output, startIndex, 10);
-            HipLeft = new KeyPoint(output, startIndex, 11);
-            HipRight = new KeyPoint(output, startIndex, 12);
-            KneeLeft = new KeyPoint(output, startIndex, 13);
-            KneeRight = new KeyPoint(output, startIndex, 14);
-            AnkleLeft = new KeyPoint(output, startIndex, 15);
-            AnkleRight = new KeyPoint(output, startIndex, 16);
-        }
 
         public void drawBone(Graphics g, float confidenceLevel = 0.6f, float diameter = 8)
         {
@@ -383,17 +450,6 @@ namespace YoloPoseRun
 
         }
 
-        public override string ToString()
-        {
-            return $"{Nose.Confidence:0.00}, {EyeLeft.Confidence:0.00}, {EyeRight.Confidence:0.00}, " +
-                   $"{EarLeft.Confidence:0.00}, {EarRight.Confidence:0.00}, {ShoulderLeft.Confidence:0.00}, " +
-                   $"{ShoulderRight.Confidence:0.00}, {ElbowLeft.Confidence:0.00}, {ElbowRight.Confidence:0.00}, " +
-                   $"{WristLeft.Confidence:0.00}, {WristRight.Confidence:0.00}, {HipLeft.Confidence:0.00}, " +
-                   $"{HipRight.Confidence:0.00}, {KneeLeft.Confidence:0.00}, {KneeRight.Confidence:0.00}, " +
-                   $"{AnkleLeft.Confidence:0.00}, {AnkleRight.Confidence:0.00}";
-        }
-
-
         public static List<KeyPoint> SortClockwise(List<KeyPoint> points)
         {
 
@@ -444,7 +500,6 @@ namespace YoloPoseRun
         {
             List<KeyPoint> subject = SortCounterClockwise(subjectSrc);
             List<KeyPoint> clip = SortCounterClockwise(clipSrc);
-
 
             List<KeyPoint> output = new List<KeyPoint>(subject);
 
