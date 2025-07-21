@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,9 +19,6 @@ using System.Threading;
 using System.ComponentModel;
 using System.Collections.ObjectModel;
 
-
-using System.IO;
-
 using Microsoft.Win32;
 
 using ControlValuesToStringClass;
@@ -29,26 +27,27 @@ namespace YoloPoseRun
 {
     public partial class MainWindow : Window
     {
+        YoloPoseRunManager progressManager;
+
         Task task_GPU0 = null;
         Task task_GPU1 = null;
         Task task_CPU = null;
 
-        YoloPoseRunManager progressManager;
         YoloPoseRunClass yoloPose_GPU0;
         YoloPoseRunClass yoloPose_GPU1;
         YoloPoseRunClass yoloPose_CPU;
 
-        public BlockingCollection<string> srcFileQueue =null;
-        public List<string> srcFileList = new List<string>();
-        List<Task> collectFilePathTaskList = new List<Task>();
+        public BlockingCollection<string> srcFileQueue = null;
+        public ConcurrentQueue<string> srcFileList = new ConcurrentQueue<string>();
 
+        private List<Task> collectFilePathTaskList = new List<Task>();
         private CancellationTokenSource tokenSource = new CancellationTokenSource();
 
         public MainWindow()
         {
             InitializeComponent();
 
-            progressManager = new YoloPoseRunManager();
+            progressManager = new YoloPoseRunManager(srcFileList);
             label_progress.DataContext = progressManager;
 
         }
@@ -112,16 +111,18 @@ namespace YoloPoseRun
                 if (srcFileQueue != null) srcFileQueue.Dispose();
                 srcFileQueue = new BlockingCollection<string>();
 
-                initiarizeTask(textBox_batchSize_CPU, out yoloPose_CPU, out task_CPU, -1);
+                progressManager.Clear();
+
                 initiarizeTask(textBox_batchSize_GPU0, out yoloPose_GPU0, out task_GPU0, 0);
                 initiarizeTask(textBox_batchSize_GPU1, out yoloPose_GPU1, out task_GPU1, 1);
+                initiarizeTask(textBox_batchSize_CPU, out yoloPose_CPU, out task_CPU, -1);
 
-                if (yoloPose_CPU != null) progressManager.Add(yoloPose_CPU);
-                if (yoloPose_GPU0 != null) progressManager.Add(yoloPose_GPU0);
-                if (yoloPose_GPU1 != null) progressManager.Add(yoloPose_GPU1);
+                if (yoloPose_GPU0 != null) progressManager.Add(yoloPose_GPU0, "GPU0");
+                if (yoloPose_GPU1 != null) progressManager.Add(yoloPose_GPU1, "GPU1");
+                if (yoloPose_CPU != null) progressManager.Add(yoloPose_CPU, "CPU");
 
                 string[] directoryPathList = textBox_directoryList.Text.Replace("\r\n", "\n").Split('\n');
-                
+
                 foreach (var directoryPath in directoryPathList)
                 {
                     if (directoryPath.Length <= 2 || !Directory.Exists(directoryPath)) continue;
@@ -145,13 +146,13 @@ namespace YoloPoseRun
                 });
             }
         }
-        
+
         private string getDirectoryNameAndFilename(string path)
         {
             return System.IO.Path.Combine(System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)), System.IO.Path.GetFileName(path));
         }
 
-        private void initiarizeTask(TextBox textBox,out YoloPoseRunClass yoloPose, out Task task, int deviceID)
+        private void initiarizeTask(TextBox textBox, out YoloPoseRunClass yoloPose, out Task task, int deviceID)
         {
             if (int.TryParse(textBox.Text, out int batchSize) && batchSize > 0)
             {
@@ -178,9 +179,6 @@ namespace YoloPoseRun
                 if (task_CPU != null) task_CPU.Wait();
 
                 taskComplete();
-
-                
-
             });
         }
 
@@ -189,6 +187,7 @@ namespace YoloPoseRun
             Dispatcher.Invoke((Action)(() =>
             {
                 button_RunModel.Content = "▶";
+                progressManager.IsComplete = true;
             }));
         }
 
@@ -199,13 +198,32 @@ namespace YoloPoseRun
                 try
                 {
                     IEnumerable<string> allFilePaths = Directory.EnumerateFiles(targetDirectoryPath, searchPattern, SearchOption.TopDirectoryOnly);
+                    List<string> filePathsBuff = new List<string>();
 
                     foreach (string filePath in allFilePaths)
                     {
+                        filePathsBuff.Add(filePath);
                         if (cancellationToken.IsCancellationRequested) break;
-                        srcFileQueue.Add(filePath);
-                        srcFileList.Add(filePath);
+
+                        if (filePathsBuff.Count > 64)
+                        {
+                            foreach (var item in filePathsBuff)
+                            {
+                                srcFileQueue.Add(item);
+                                srcFileList.Enqueue(item);
+                            }
+
+                            filePathsBuff.Clear();
+                        }
                     }
+
+                    foreach (var item in filePathsBuff)
+                    {
+                        srcFileQueue.Add(item);
+                        srcFileList.Enqueue(item);
+                    }
+
+                    filePathsBuff.Clear();
                 }
                 catch (Exception ex)
                 {
@@ -217,53 +235,6 @@ namespace YoloPoseRun
         }
     }
 
-    public class YoloPoseRunManager : INotifyPropertyChanged
-    {
-        public ObservableCollection<YoloPoseRunClass> ProcessRuns { get; } = new ObservableCollection<YoloPoseRunClass>();
-        private string _aggregatedCountText = "... no data ...";
-        public string AggregatedCountText
-        {
-            get => _aggregatedCountText;
-            private set
-            {
-                if (_aggregatedCountText != value)
-                {
-                    _aggregatedCountText = value;
-                    OnPropertyChanged(nameof(AggregatedCountText));
-                }
-            }
-        }
-
-        public void Add(YoloPoseRunClass run)
-        {
-            if (run == null) return;
-
-            run.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(YoloPoseRunClass.ProcessRunCount))
-                    UpdateAggregatedText();
-            };
-
-            ProcessRuns.Add(run);
-        }
-
-        private void UpdateAggregatedText()
-        {
-            try
-            {
-                AggregatedCountText = string.Join(",", ProcessRuns.Select(p => p.ProcessRunCount));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
-            }
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected void OnPropertyChanged(string propertyName) =>
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-
-    }
-
+    
 
 }

@@ -63,6 +63,7 @@
     <Compile Include="PoseKeyPoints.cs" />
     <Compile Include="YoloPoseModelHandle.cs" />
     <Compile Include="YoloPoseRun.cs" />
+    <Compile Include="YoloPoseRunManager.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

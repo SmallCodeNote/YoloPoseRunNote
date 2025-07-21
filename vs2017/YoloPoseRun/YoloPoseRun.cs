@@ -48,11 +48,8 @@ namespace YoloPoseRun
         public void Dispose()
         {
             if (yoloPoseModelHandle != null) yoloPoseModelHandle.Dispose();
-
-
             GC.SuppressFinalize(this);
         }
-
 
         private int _processRunCount;
         public int ProcessRunCount
@@ -81,7 +78,6 @@ namespace YoloPoseRun
                 }
             }
         }
-
 
         public event PropertyChangedEventHandler PropertyChanged;
 
