@@ -37,7 +37,7 @@ namespace YoloPoseRun
         BlockingCollection<string> videoSourceFilePathQueue;
         string saveDirectoryPath = "";
 
-        public YoloPoseRunClass(BlockingCollection<string> videoSourceFilePathQueue, string modelFilePath, int deviceID,string ConfidenceParameterLinesString)
+        public YoloPoseRunClass(BlockingCollection<string> videoSourceFilePathQueue, string modelFilePath, int deviceID, string ConfidenceParameterLinesString)
         {
             this.videoSourceFilePathQueue = videoSourceFilePathQueue;
             this.DeviceID = deviceID;
@@ -195,19 +195,13 @@ namespace YoloPoseRun
 
                         frameList.Add(new FrameDataSet(BitmapConverter.ToBitmap(frame), frameIndex, saveDirectoryPath));
 
-                        if (frameList.Count >= PredictTaskBatchSize)
+                        if (frameList.Count >= PredictTaskBatchSize && frameList.Count > 0)
                         {
                             ProgressReport = $"{frameIndex} / {videoSource.FrameCount}";
-
-                            Console.Write($"  Add+B start {frameList[0].frameIndex} + {frameList.Count}");
-                            foreach (var item in frameList)
-                            {
-                                frameBitmapQueue.Add(item);
-                            }
+                            Console.Write($"  [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+B start {frameList[0].frameIndex} + {frameList.Count}");
+                            foreach (var item in frameList) { frameBitmapQueue.Add(item); }
                             Console.WriteLine($"  Add+B comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
-
                             frameList.Clear();
-
                         }
 
                         if (cancellationToken.IsCancellationRequested) { break; }
@@ -215,21 +209,20 @@ namespace YoloPoseRun
                         frameIndex = videoSource.PosFrames;
                     }
 
-                    Console.Write($"  Add+B start {frameList[0].frameIndex} + {frameList.Count}");
-                    foreach (var item in frameList)
+                    if (frameList.Count > 0)
                     {
-                        frameBitmapQueue.Add(item);
-                    }
-                    Console.WriteLine($"  Add+B comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
+                        Console.Write($"  [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+B start {frameList[0].frameIndex} + {frameList.Count}");
+                        foreach (var item in frameList) { frameBitmapQueue.Add(item); }
+                        Console.WriteLine($"  Add+B comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
+                        frameList.Clear();
 
-                    frameList.Clear();
+                    }
+
                     frameBitmapQueue.CompleteAdding();
                 }
 
                 ProgressReport = $"{frameIndex} / {videoSource.FrameCount}";
-
                 Console.WriteLine($"Complete: {maxIndex} { System.Reflection.MethodBase.GetCurrentMethod().Name}");
-
             }
             catch (Exception ex)
             {
@@ -244,6 +237,7 @@ namespace YoloPoseRun
                 int workersCount = Environment.ProcessorCount - 1;
                 workersCount = workersCount < 1 ? 1 : workersCount;
                 int frameListMasterSize = PredictTaskBatchSize / workersCount;
+                if (frameListMasterSize < 1) frameListMasterSize = 1;
 
                 var frameBitmapQueueTemp = new BlockingCollection<List<FrameDataSet>>(workersCount);
                 var frameNextIndexQueue = new ConcurrentQueue<int>();
@@ -271,14 +265,10 @@ namespace YoloPoseRun
                                 {
                                     while (!frameNextIndexQueue.TryPeek(out int nextIndex) || frameList[0].frameIndex != nextIndex) { Thread.Sleep(10); }
 
-                                    Console.Write($"   Add+T start {frameList[0].frameIndex} + {frameList.Count}");
-                                    foreach (var item in frameList)
-                                    {
-                                        frameTensorQueue.Add(item);
-                                    }
+                                    Console.Write($"   [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+T start {frameList[0].frameIndex} + {frameList.Count}");
+                                    foreach (var item in frameList) { frameTensorQueue.Add(item); }
                                     Console.WriteLine($"  Add+T comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex }");
                                     frameList.Clear();
-
                                     frameNextIndexQueue.TryDequeue(out int result);
                                 }
 
@@ -300,7 +290,7 @@ namespace YoloPoseRun
                     {
                         frameListMaster.Add(frameInfo);
 
-                        if (frameListMaster.Count >= frameListMasterSize)
+                        if (frameListMaster.Count >= frameListMasterSize && frameListMaster.Count > 0)
                         {
                             frameNextIndexQueue.Enqueue(frameListMaster[0].frameIndex);
                             frameBitmapQueueTemp.Add(frameListMaster);
@@ -319,9 +309,7 @@ namespace YoloPoseRun
 
                 Task.WaitAll(workers);
                 frameBitmapQueueTemp.Dispose();
-
                 frameTensorQueue.CompleteAdding();
-
                 Console.WriteLine($"Complete: {System.Reflection.MethodBase.GetCurrentMethod().Name}");
             }
             catch (Exception ex)
@@ -413,6 +401,8 @@ namespace YoloPoseRun
         {
             try
             {
+                if (frameList.Count < 1) return;
+
                 Console.WriteLine($".....Start: {frameList[0].frameIndex} + {frameList.Count} " + System.Reflection.MethodBase.GetCurrentMethod().Name);
 
                 int arrayMax = frameList.Count;
@@ -435,11 +425,9 @@ namespace YoloPoseRun
         {
             try
             {
-                Console.Write($"    Add+P start {frameList[0].frameIndex} + {frameList.Count}");
-                foreach (var frameInfo in frameList)
-                {
-                    framePoseInfoQueue.Add(frameInfo);
-                }
+                if (frameList.Count < 1) return;
+                Console.Write($"    [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+P start {frameList[0].frameIndex} + {frameList.Count}");
+                foreach (var frameInfo in frameList) { framePoseInfoQueue.Add(frameInfo); }
                 Console.WriteLine($"  Add+P comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
             }
             catch (Exception ex)
@@ -488,7 +476,10 @@ namespace YoloPoseRun
 
         private void dequeue_framePoseInfo_addQueue(IReadOnlyList<FrameDataSet> frameList)
         {
-            Console.Write($"      Add+R start {frameList[0].frameIndex} + {frameList.Count}");
+
+            if (frameList.Count < 1) return;
+
+            Console.Write($"      [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+R start {frameList[0].frameIndex} + {frameList.Count}");
 
             foreach (var frameInfo in frameList)
             {
@@ -636,6 +627,7 @@ namespace YoloPoseRun
                         {
                             saveDirectoryPath = frameInfo.saveDirectoryPath;
                             saveVideoPath = Path.Combine(saveDirectoryPath, Path.GetFileNameWithoutExtension(saveDirectoryPath) + "_pose.mp4");
+
                             videoWriter = new VideoWriter(saveVideoPath, FourCC.FromString("mp4v"), 30, new OpenCvSharp.Size(640, 360));
                             videoWriter.Set(VideoWriterProperties.HwAcceleration, (double)AVHWDeviceType.AV_HWDEVICE_TYPE_QSV);
                         }
