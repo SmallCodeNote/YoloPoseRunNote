@@ -17,12 +17,12 @@ namespace YoloPoseRun
     {
         YoloPoseRunManager progressManager;
 
-        Task task_GPU0 = null;
-        Task task_GPU1 = null;
+        Task task_GPU0_0 = null;
+        Task task_GPU1_0 = null;
         Task task_CPU = null;
 
-        YoloPoseRunClass yoloPose_GPU0;
-        YoloPoseRunClass yoloPose_GPU1;
+        YoloPoseRunClass yoloPose_GPU0_0;
+        YoloPoseRunClass yoloPose_GPU1_0;
         YoloPoseRunClass yoloPose_CPU;
 
         public BlockingCollection<string> srcFileQueue = null;
@@ -101,12 +101,12 @@ namespace YoloPoseRun
 
                 progressManager.Clear();
 
-                initializeTask(textBox_batchSize_GPU0, out yoloPose_GPU0, out task_GPU0, 0);
-                initializeTask(textBox_batchSize_GPU1, out yoloPose_GPU1, out task_GPU1, 1);
+                initializeTask(textBox_batchSize_GPU0, out yoloPose_GPU0_0, out task_GPU0_0, 0);
+                initializeTask(textBox_batchSize_GPU1, out yoloPose_GPU1_0, out task_GPU1_0, 1);
                 initializeTask(textBox_batchSize_CPU, out yoloPose_CPU, out task_CPU, -1);
 
-                if (yoloPose_GPU0 != null) progressManager.Add(yoloPose_GPU0, "GPU0");
-                if (yoloPose_GPU1 != null) progressManager.Add(yoloPose_GPU1, "GPU1");
+                if (yoloPose_GPU0_0 != null) progressManager.Add(yoloPose_GPU0_0, "GPU0");
+                if (yoloPose_GPU1_0 != null) progressManager.Add(yoloPose_GPU1_0, "GPU1");
                 if (yoloPose_CPU != null) progressManager.Add(yoloPose_CPU, "CPU");
 
                 string[] directoryPathList = textBox_directoryList.Text.Replace("\r\n", "\n").Split('\n');
@@ -125,8 +125,8 @@ namespace YoloPoseRun
                 tokenSource.Cancel();
                 Task.Run(() =>
                 {
-                    if (task_GPU0 != null) task_GPU0.Wait();
-                    if (task_GPU1 != null) task_GPU1.Wait();
+                    if (task_GPU0_0 != null) task_GPU0_0.Wait();
+                    if (task_GPU1_0 != null) task_GPU1_0.Wait();
                     if (task_CPU != null) task_CPU.Wait();
 
                     taskComplete();
@@ -147,7 +147,6 @@ namespace YoloPoseRun
                 yoloPose = new YoloPoseRunClass(srcFileQueue, textBox_modelFilePath.Text, deviceID,textBox_initializeLinesString.Text);
                 yoloPose.PredictTaskBatchSize = batchSize;
                 task = yoloPose.Run(tokenSource.Token);
-                
             }
             else
             {
@@ -163,8 +162,8 @@ namespace YoloPoseRun
 
             Task.Run(() =>
             {
-                if (task_GPU0 != null) task_GPU0.Wait();
-                if (task_GPU1 != null) task_GPU1.Wait();
+                if (task_GPU0_0 != null) task_GPU0_0.Wait();
+                if (task_GPU1_0 != null) task_GPU1_0.Wait();
                 if (task_CPU != null) task_CPU.Wait();
 
                 taskComplete();
