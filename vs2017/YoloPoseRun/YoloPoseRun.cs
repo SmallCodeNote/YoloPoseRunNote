@@ -91,6 +91,14 @@ namespace YoloPoseRun
 
         public Task Run(CancellationToken cancellationToken)
         {
+            taskStartTime = DateTime.Now;
+
+            if (timer1 != null) timer1.Dispose();
+            timer1 = new System.Timers.Timer();
+            timer1.Interval = 1000;
+            timer1.Elapsed += timer1_Tick;
+            timer1.Start();
+
             return Task.Run(() =>
             {
                 try
@@ -130,8 +138,8 @@ namespace YoloPoseRun
 
                             if (!Directory.Exists(saveDirectoryPath)) { Directory.CreateDirectory(saveDirectoryPath); } else { continue; }
 
-                            frameBitmapQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
-                            frameTensorQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
+                            frameBitmapQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize);
+                            frameTensorQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize);
                             framePoseInfoQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
                             frameReportQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
                             frameVideoMatQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
@@ -163,6 +171,7 @@ namespace YoloPoseRun
 
                     if (videoSource != null) { videoSource.Dispose(); targetFilename = ""; }
 
+                    timer1.Stop();
                 }
                 catch (Exception ex)
                 {
@@ -174,6 +183,17 @@ namespace YoloPoseRun
             }, cancellationToken);
 
         }
+
+        DateTime taskStartTime;
+        System.Timers.Timer timer1;
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            if (frameBitmapQueue != null && frameTensorQueue != null && framePoseInfoQueue != null && frameReportQueue != null)
+            {
+                Console.WriteLine($"[{DeviceID}]\t{(DateTime.Now - taskStartTime).TotalSeconds:0}\tB{frameBitmapQueue.Count}\tT{frameTensorQueue.Count}\tP{framePoseInfoQueue.Count}\tR{frameReportQueue.Count}");
+            }
+        }
+
 
         string ProgressReport = "";
 
@@ -202,6 +222,8 @@ namespace YoloPoseRun
                             foreach (var item in frameList) { frameBitmapQueue.Add(item); }
                             Console.WriteLine($"  Add+B comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
                             frameList.Clear();
+
+                            Task.WaitAll(Task.Delay(3));
                         }
 
                         if (cancellationToken.IsCancellationRequested) { break; }
@@ -263,7 +285,7 @@ namespace YoloPoseRun
 
                                 if (frameList.Count > 0)
                                 {
-                                    while (!frameNextIndexQueue.TryPeek(out int nextIndex) || frameList[0].frameIndex != nextIndex) { Thread.Sleep(10); }
+                                    while (!frameNextIndexQueue.TryPeek(out int nextIndex) || frameList[0].frameIndex != nextIndex) { Task.WaitAll(Task.Delay(10)); }
 
                                     Console.Write($"   [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+T start {frameList[0].frameIndex} + {frameList.Count}");
                                     foreach (var item in frameList) { frameTensorQueue.Add(item); }
@@ -476,17 +498,20 @@ namespace YoloPoseRun
 
         private void dequeue_framePoseInfo_addQueue(IReadOnlyList<FrameDataSet> frameList)
         {
-
             if (frameList.Count < 1) return;
 
             Console.Write($"      [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+R start {frameList[0].frameIndex} + {frameList.Count}");
 
-            foreach (var frameInfo in frameList)
+            var reportDict = new ConcurrentDictionary<int, FrameDataSet>();
+            var videoDict = new ConcurrentDictionary<int, FrameDataSet>();
+
+            Parallel.For(0, frameList.Count, index =>
             {
-                List<PoseInfo> poseInfos = yoloPoseModelHandle.PoseInfoRead(frameInfo.results);
+                var frameInfo = frameList[index];
+                var poseInfos = yoloPoseModelHandle.PoseInfoRead(frameInfo.results);
                 frameInfo.results.Dispose();
 
-                frameReportQueue.Add(new FrameDataSet(poseInfos, frameInfo.frameIndex, frameInfo.saveDirectoryPath));
+                reportDict[index] = new FrameDataSet(poseInfos, frameInfo.frameIndex, frameInfo.saveDirectoryPath);
 
                 if (frameInfo.bitmap != null)
                 {
@@ -494,17 +519,33 @@ namespace YoloPoseRun
                     using (Mat mat = BitmapConverter.ToMat(frameInfo.bitmap))
                     {
                         Mat mat3C = mat.CvtColor(ColorConversionCodes.BGRA2BGR);
-                        frameVideoMatQueue.Add(new FrameDataSet(mat3C, frameInfo.frameIndex, frameInfo.saveDirectoryPath));
+                        videoDict[index] = new FrameDataSet(mat3C, frameInfo.frameIndex, frameInfo.saveDirectoryPath);
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"ERROR: { System.Reflection.MethodBase.GetCurrentMethod().Name }  Null Bitmap");
+                    Console.WriteLine($"ERROR: {System.Reflection.MethodBase.GetCurrentMethod().Name}  Null Bitmap");
+                }
+            });
+
+            
+            for (int i = 0; i < frameList.Count; i++)
+            {
+                if (reportDict.TryGetValue(i, out var reportItem))
+                {
+                    frameReportQueue.Add(reportItem);
+                }
+
+                if (videoDict.TryGetValue(i, out var videoItem))
+                {
+                    frameVideoMatQueue.Add(videoItem);
                 }
             }
 
-            Console.WriteLine($"  Add+R comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex }");
+            Console.WriteLine($"  Add+R comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
         }
+
+
 
         string targetFilename = "";
 
