@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -20,13 +21,14 @@ namespace YoloPoseRun
     public class YoloPoseRunClass : INotifyPropertyChanged, IDisposable
     {
         public int PredictTaskBatchSize = 256;
+        public int PredictTaskBuffSize = 3;
 
-        BlockingCollection<FrameDataSet> frameBitmapQueue;
-        BlockingCollection<FrameDataSet> frameTensorQueue;
-        BlockingCollection<FrameDataSet> framePoseInfoQueue;
+        BlockingCollection<List<FrameDataSet>> frameBitmapQueue;
+        BlockingCollection<List<FrameDataSet>> frameTensorQueue;
+        BlockingCollection<List<FrameDataSet>> framePoseInfoQueue;
 
-        BlockingCollection<FrameDataSet> frameReportQueue;
-        BlockingCollection<FrameDataSet> frameVideoMatQueue;
+        BlockingCollection<List<FrameDataSet>> frameReportQueue;
+        BlockingCollection<List<FrameDataSet>> frameVideoMatQueue;
 
         VideoCapture videoSource;
         YoloPoseModelHandle yoloPoseModelHandle;
@@ -89,8 +91,6 @@ namespace YoloPoseRun
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name)
                 );
 
-
-        /*
         public Task Run(CancellationToken cancellationToken)
         {
             taskStartTime = DateTime.Now;
@@ -105,112 +105,11 @@ namespace YoloPoseRun
             {
                 try
                 {
-                    string ext = "";
-                    ProcessRunCount = 0;
-                    string videoSourceFilePath = "";
-                    while (!videoSourceFilePathQueue.IsCompleted)
-                    {
-                        getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} TryTake");
-                        if (videoSourceFilePathQueue.TryTake(out videoSourceFilePath, 100))
-                        {
-
-                            VideoSourceFilePath = videoSourceFilePath;
-                            ProcessRunCount++;
-
-                            if (!File.Exists(videoSourceFilePath)) continue;
-
-                            Console.WriteLine($"/// capturePath: {videoSourceFilePath}");
-                            ext = Path.GetExtension(videoSourceFilePath);
-
-                            if (ext == ".mp4")
-                            {
-                                if (videoSource != null) { videoSource.Dispose(); targetFilename = ""; }
-                                videoSource = new VideoCapture(videoSourceFilePath);
-                                targetFilename = Path.GetFileNameWithoutExtension(videoSourceFilePath);
-                            }
-                            else
-                            {
-                                continue;
-                            }
-
-                            if (videoSource == null) return;
-
-                            saveDirectoryPath = Path.Combine(Path.GetDirectoryName(videoSourceFilePath), Path.GetFileNameWithoutExtension(videoSourceFilePath));
-                            Console.WriteLine($"/// masterDirectoryPath: {saveDirectoryPath}");
-
-                            if (!Directory.Exists(saveDirectoryPath)) { Directory.CreateDirectory(saveDirectoryPath); } else { continue; }
-
-                            frameBitmapQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize);
-                            frameTensorQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize);
-                            framePoseInfoQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
-                            frameReportQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
-                            frameVideoMatQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
-
-                            Task task_frameVideoReader = Task.Run(() => dequeue_frameVideoReader(cancellationToken));
-                            Task task_frameBitmap = Task.Run(() => dequeue_frameBitmap());
-                            Task task_frameTensor = Task.Run(() => dequeue_frameTensor());
-                            Task task_framePoseInfo = Task.Run(() => dequeue_framePoseInfo());
-                            Task task_frameReport = Task.Run(() => dequeue_frameReport());
-                            Task task_frameVideoMat = Task.Run(() => dequeue_frameVideoMat());
-
-                            task_frameVideoReader.Wait();
-                            task_frameBitmap.Wait();
-                            task_frameTensor.Wait();
-                            task_framePoseInfo.Wait();
-                            task_frameReport.Wait();
-                            task_frameVideoMat.Wait();
-
-                            frameBitmapQueue.Dispose();
-                            frameTensorQueue.Dispose();
-                            framePoseInfoQueue.Dispose();
-                            frameReportQueue.Dispose();
-                            frameVideoMatQueue.Dispose();
-
-                        }
-                        getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} LoopEnd");
-                    }
-
-
-
-
-
-                    getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} Completed");
-
-                    if (videoSource != null) { videoSource.Dispose(); targetFilename = ""; }
-
-                    timer1.Stop();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
-                }
-
-                Console.WriteLine($"///  FIN  ///");
-
-            }, cancellationToken);
-
-        }*/
-
-
-        public Task Run(CancellationToken cancellationToken)
-        {
-            taskStartTime = DateTime.Now;
-
-            if (timer1 != null) timer1.Dispose();
-            timer1 = new System.Timers.Timer();
-            timer1.Interval = 1000;
-            timer1.Elapsed += timer1_Tick;
-            timer1.Start();
-
-            return Task.Run(() =>
-            {
-                try
-                {
-                    frameBitmapQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize);
-                    frameTensorQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize);
-                    framePoseInfoQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
-                    frameReportQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
-                    frameVideoMatQueue = new BlockingCollection<FrameDataSet>(PredictTaskBatchSize * 2);
+                    frameBitmapQueue = new BlockingCollection<List<FrameDataSet>>(PredictTaskBuffSize);
+                    frameTensorQueue = new BlockingCollection<List<FrameDataSet>>(PredictTaskBuffSize);
+                    framePoseInfoQueue = new BlockingCollection<List<FrameDataSet>>(PredictTaskBuffSize);
+                    frameReportQueue = new BlockingCollection<List<FrameDataSet>>(PredictTaskBuffSize);
+                    frameVideoMatQueue = new BlockingCollection<List<FrameDataSet>>(PredictTaskBuffSize);
 
                     Task task_frameVideoReader = Task.Run(() => dequeue_frameVideoReader(cancellationToken));
                     Task task_frameBitmap = Task.Run(() => dequeue_frameBitmap());
@@ -232,7 +131,6 @@ namespace YoloPoseRun
                     frameReportQueue.Dispose();
                     frameVideoMatQueue.Dispose();
 
-
                     timer1.Stop();
                 }
                 catch (Exception ex)
@@ -246,32 +144,25 @@ namespace YoloPoseRun
 
         }
 
-        DateTime taskStartTime;
-        System.Timers.Timer timer1;
-        private void timer1_Tick(object sender, EventArgs e)
-        {
-            if (frameBitmapQueue != null && frameTensorQueue != null && framePoseInfoQueue != null && frameReportQueue != null)
-            {
-                Console.WriteLine($"[{DeviceID}]\t{(DateTime.Now - taskStartTime).TotalSeconds:0}\tB{frameBitmapQueue.Count}\tT{frameTensorQueue.Count}\tP{framePoseInfoQueue.Count}\tR{frameReportQueue.Count}");
-            }
-        }
-
-
         string ProgressReport = "";
 
         private void dequeue_frameVideoReader(CancellationToken cancellationToken)
         {
             try
             {
+                Stopwatch sw = new Stopwatch();
+
                 string ext = "";
                 ProcessRunCount = 0;
                 string videoSourceFilePath = "";
+                int videoSource_FrameCount = 0;
+
                 while (!videoSourceFilePathQueue.IsCompleted)
                 {
-                    getDebugInfo(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} TryTake");
+                    __debug_CodeInfoWriteToConsole__(System.Reflection.MethodBase.GetCurrentMethod().Name + $" : {DeviceID} TryTake");
+
                     if (videoSourceFilePathQueue.TryTake(out videoSourceFilePath, 100))
                     {
-
                         VideoSourceFilePath = videoSourceFilePath;
                         ProcessRunCount++;
 
@@ -295,34 +186,37 @@ namespace YoloPoseRun
                             if (videoSource != null) { videoSource.Dispose(); targetFilename = ""; }
                             videoSource = new VideoCapture(videoSourceFilePath);
                             targetFilename = Path.GetFileNameWithoutExtension(videoSourceFilePath);
+                            videoSource_FrameCount = videoSource.FrameCount;
                         }
 
                         if (videoSource == null) continue;
 
-
                         int maxIndex = int.MinValue;
-                        List<FrameDataSet> frameList = new List<FrameDataSet>(PredictTaskBatchSize);
 
                         int frameIndex = 0;
                         videoSource.PosFrames = 0;
+
+                        sw.Restart();
+                        List<FrameDataSet> frameList = new List<FrameDataSet>(PredictTaskBatchSize);
 
                         using (Mat frame = new Mat())
                         {
                             while (videoSource.Read(frame) && !frame.Empty())
                             {
                                 maxIndex = Math.Max(maxIndex, frameIndex);
-
                                 frameList.Add(new FrameDataSet(BitmapConverter.ToBitmap(frame), frameIndex, saveDirectoryPath));
 
-                                if (frameList.Count >= PredictTaskBatchSize && frameList.Count > 0)
+                                int frameList_Count = frameList.Count;
+                                if (frameList_Count >= PredictTaskBatchSize && frameList_Count > 0)
                                 {
-                                    ProgressReport = $"{frameIndex} / {videoSource.FrameCount}";
-                                    Console.Write($"  [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+B start {frameList[0].frameIndex} + {frameList.Count}");
-                                    foreach (var item in frameList) { frameBitmapQueue.Add(item); }
-                                    Console.WriteLine($"  Add+B comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
-                                    frameList.Clear();
+                                    __debug_MessageWriteToConsole__($"TaskB\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
-                                    Task.WaitAll(Task.Delay(3));
+                                    ProgressReport = $"{frameIndex} / {videoSource_FrameCount}";
+                                    frameBitmapQueue.Add(frameList); qB += frameList.Count;
+
+                                    __debug_MessageWriteToConsole__($"Add_B\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
+                                    frameList = new List<FrameDataSet>(PredictTaskBatchSize);
                                 }
 
                                 if (cancellationToken.IsCancellationRequested) { break; }
@@ -332,18 +226,14 @@ namespace YoloPoseRun
 
                             if (frameList.Count > 0)
                             {
-                                Console.Write($"  [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+B start {frameList[0].frameIndex} + {frameList.Count}");
-                                foreach (var item in frameList) { frameBitmapQueue.Add(item); }
-                                Console.WriteLine($"  Add+B comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
-                                frameList.Clear();
+                                __debug_MessageWriteToConsole__($"TaskB\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                                frameBitmapQueue.Add(frameList); qB += frameList.Count;
+                                __debug_MessageWriteToConsole__($"Add_B\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
                             }
-
-                            //frameBitmapQueue.CompleteAdding();
                         }
 
-                        ProgressReport = $"{frameIndex} / {videoSource.FrameCount}";
+                        ProgressReport = $"{frameIndex} / {videoSource_FrameCount}";
                         Console.WriteLine($"Complete: {maxIndex} { System.Reflection.MethodBase.GetCurrentMethod().Name}");
-
                     }
                 }
 
@@ -359,81 +249,31 @@ namespace YoloPoseRun
         {
             try
             {
-                int workersCount = Environment.ProcessorCount - 1;
-                workersCount = workersCount < 1 ? 1 : workersCount;
-                int frameListMasterSize = PredictTaskBatchSize / workersCount;
-                if (frameListMasterSize < 1) frameListMasterSize = 1;
-
-                var frameBitmapQueueTemp = new BlockingCollection<List<FrameDataSet>>(workersCount);
-                var frameNextIndexQueue = new ConcurrentQueue<int>();
-
-                Task[] workers = new Task[workersCount];
-
-                for (int i = 0; i < workers.Length; i++)
-                {
-                    workers[i] = Task.Run(() =>
-                    {
-                        try
-                        {
-                            List<FrameDataSet> frameList = new List<FrameDataSet>(frameListMasterSize);
-
-                            foreach (var frameInfos in frameBitmapQueueTemp.GetConsumingEnumerable())
-                            {
-                                foreach (var frameInfo in frameInfos)
-                                {
-                                    Tensor<float> tensor = ConvertBitmapToTensor(frameInfo.bitmap);
-                                    List<NamedOnnxValue> inputs = yoloPoseModelHandle.GetInputs(tensor);
-                                    frameList.Add(new FrameDataSet(inputs, frameInfo.bitmap, frameInfo.frameIndex, frameInfo.saveDirectoryPath));
-                                }
-
-                                if (frameList.Count > 0)
-                                {
-                                    while (!frameNextIndexQueue.TryPeek(out int nextIndex) || frameList[0].frameIndex != nextIndex) { Task.WaitAll(Task.Delay(10)); }
-
-                                    Console.Write($"   [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+T start {frameList[0].frameIndex} + {frameList.Count}");
-                                    foreach (var item in frameList) { frameTensorQueue.Add(item); }
-                                    Console.WriteLine($"  Add+T comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex }");
-                                    frameList.Clear();
-                                    frameNextIndexQueue.TryDequeue(out int result);
-                                }
-
-                                frameInfos.Clear();
-                            }
-                        }
-                        catch
-                        {
-                            Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name}");
-                        }
-                    });
-                }
-
-                List<FrameDataSet> frameListMaster = new List<FrameDataSet>(frameListMasterSize);
+                Stopwatch sw = new Stopwatch();
+                sw.Restart();
 
                 while (!frameBitmapQueue.IsCompleted)
                 {
-                    if (frameBitmapQueue.TryTake(out FrameDataSet frameInfo, 10))
+                    if (frameBitmapQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        frameListMaster.Add(frameInfo);
+                        qB -= frameList.Count;
 
-                        if (frameListMaster.Count >= frameListMasterSize && frameListMaster.Count > 0)
+                        __debug_MessageWriteToConsole__($"TakeB\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
+                        Parallel.For(0, frameList.Count, index =>
                         {
-                            frameNextIndexQueue.Enqueue(frameListMaster[0].frameIndex);
-                            frameBitmapQueueTemp.Add(frameListMaster);
-                            frameListMaster = new List<FrameDataSet>(frameListMasterSize);
+                            var frameInfo = frameList[index];
+                            Tensor<float> tensor = ConvertBitmapToTensor(frameInfo.bitmap);
+                            frameInfo.inputs = yoloPoseModelHandle.GetInputs(tensor);
                         }
+                        );
+
+                        __debug_MessageWriteToConsole__($"TaskT\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        frameTensorQueue.Add(frameList); qT += frameList.Count;
+                        __debug_MessageWriteToConsole__($"Add_T\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
                     }
                 }
 
-                if (frameListMaster.Count > 0)
-                {
-                    frameNextIndexQueue.Enqueue(frameListMaster[0].frameIndex);
-                    frameBitmapQueueTemp.Add(frameListMaster);
-                }
-
-                frameBitmapQueueTemp.CompleteAdding();
-
-                Task.WaitAll(workers);
-                frameBitmapQueueTemp.Dispose();
                 frameTensorQueue.CompleteAdding();
                 Console.WriteLine($"Complete: {System.Reflection.MethodBase.GetCurrentMethod().Name}");
             }
@@ -488,32 +328,40 @@ namespace YoloPoseRun
         {
             try
             {
+                Stopwatch sw = new Stopwatch();
+                sw.Restart();
+
                 int maxIndex = int.MinValue;
-                List<FrameDataSet> frameList = new List<FrameDataSet>(PredictTaskBatchSize);
 
                 while (!frameTensorQueue.IsCompleted)
                 {
-                    if (frameTensorQueue.TryTake(out FrameDataSet frameInfo, 10))
+                    if (frameTensorQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        frameList.Add(frameInfo);
+                        qT -= frameList.Count;
+                        __debug_MessageWriteToConsole__($"TakeT\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
-                        if (frameList.Count >= PredictTaskBatchSize)
+                        //PredictBatch(frameList);
+
+                        if (frameList.Count < 1) continue;
+
+                        int frameList_Count = frameList.Count;
+
+                        for (int i = 0; i < frameList_Count; i++)
                         {
-                            Console.WriteLine($"  StartPredictTask {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
-                            PredictBatch(frameList);
-                            frameList.Clear();
+                            frameList[i].results = yoloPoseModelHandle.PredicteResults(frameList[i].inputs);
                         }
+
+                        __debug_MessageWriteToConsole__($"TaskP\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
+                        framePoseInfoQueue.Add(frameList); qP += frameList.Count;
+
+                        __debug_MessageWriteToConsole__($"Add_P\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
                     }
                 }
 
-                if (frameList.Count > 0)
-                {
-                    Console.WriteLine($"  LastPredictTask {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
-                    PredictBatch(frameList);
-                    frameList.Clear();
-                }
-
                 framePoseInfoQueue.CompleteAdding();
+
                 Console.WriteLine($"Complete: {maxIndex} {System.Reflection.MethodBase.GetCurrentMethod().Name}");
             }
             catch (Exception ex)
@@ -521,70 +369,24 @@ namespace YoloPoseRun
                 Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
             }
         }
-
-        public void PredictBatch(IReadOnlyList<FrameDataSet> frameList)
-        {
-            try
-            {
-                if (frameList.Count < 1) return;
-
-                Console.WriteLine($".....Start: {frameList[0].frameIndex} + {frameList.Count} " + System.Reflection.MethodBase.GetCurrentMethod().Name);
-
-                int arrayMax = frameList.Count;
-                for (int i = 0; i < arrayMax; i++)
-                {
-                    frameList[i].results = yoloPoseModelHandle.PredicteResults(frameList[i].inputs);
-                }
-
-                Console.WriteLine($".....Complete: {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex} {System.Reflection.MethodBase.GetCurrentMethod().Name}");
-
-                framePoseInfoQueueEnqueue(frameList);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
-            }
-        }
-
-        public void framePoseInfoQueueEnqueue(IReadOnlyList<FrameDataSet> frameList)
-        {
-            try
-            {
-                if (frameList.Count < 1) return;
-                Console.Write($"    [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+P start {frameList[0].frameIndex} + {frameList.Count}");
-                foreach (var frameInfo in frameList) { framePoseInfoQueue.Add(frameInfo); }
-                Console.WriteLine($"  Add+P comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
-            }
-        }
-
+        
         private void dequeue_framePoseInfo()
         {
             try
             {
-                List<FrameDataSet> frameList = new List<FrameDataSet>(PredictTaskBatchSize);
+                Stopwatch sw = new Stopwatch();
+                sw.Restart();
 
                 while (!framePoseInfoQueue.IsCompleted)
                 {
-                    if (framePoseInfoQueue.TryTake(out FrameDataSet frameInfo, 10))
+                    if (framePoseInfoQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        frameList.Add(frameInfo);
+                        qP -= frameList.Count;
+                        __debug_MessageWriteToConsole__($"TakeP\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        drawPoseAndAddQueues(frameList);
+                        __debug_MessageWriteToConsole__($"Add_R/V\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
-                        if (frameList.Count >= PredictTaskBatchSize)
-                        {
-                            dequeue_framePoseInfo_addQueue(frameList);
-                            frameList.Clear();
-                        }
                     }
-                }
-
-                if (frameList.Count > 0)
-                {
-                    dequeue_framePoseInfo_addQueue(frameList);
-                    frameList.Clear();
                 }
 
                 frameReportQueue.CompleteAdding();
@@ -599,11 +401,9 @@ namespace YoloPoseRun
             }
         }
 
-        private void dequeue_framePoseInfo_addQueue(IReadOnlyList<FrameDataSet> frameList)
+        private void drawPoseAndAddQueues(List<FrameDataSet> frameList)
         {
             if (frameList.Count < 1) return;
-
-            Console.Write($"      [{DeviceID}][{DateTime.Now:HH:mm:ss}] Add+R start {frameList[0].frameIndex} + {frameList.Count}");
 
             var reportDict = new ConcurrentDictionary<int, FrameDataSet>();
             var videoDict = new ConcurrentDictionary<int, FrameDataSet>();
@@ -613,17 +413,14 @@ namespace YoloPoseRun
                 var frameInfo = frameList[index];
                 var poseInfos = yoloPoseModelHandle.PoseInfoRead(frameInfo.results);
                 frameInfo.results.Dispose();
+                frameInfo.PoseInfos = poseInfos;
 
                 reportDict[index] = new FrameDataSet(poseInfos, frameInfo.frameIndex, frameInfo.saveDirectoryPath);
 
                 if (frameInfo.bitmap != null)
                 {
                     drawPose(frameInfo.bitmap, poseInfos);
-                    using (Mat mat = BitmapConverter.ToMat(frameInfo.bitmap))
-                    {
-                        Mat mat3C = mat.CvtColor(ColorConversionCodes.BGRA2BGR);
-                        videoDict[index] = new FrameDataSet(mat3C, frameInfo.frameIndex, frameInfo.saveDirectoryPath);
-                    }
+                    videoDict[index] = frameInfo;
                 }
                 else
                 {
@@ -631,23 +428,18 @@ namespace YoloPoseRun
                 }
             });
 
+            List<FrameDataSet> reportList = new List<FrameDataSet>(frameList.Count);
+            List<FrameDataSet> videoList = new List<FrameDataSet>(frameList.Count);
 
             for (int i = 0; i < frameList.Count; i++)
             {
-                if (reportDict.TryGetValue(i, out var reportItem))
-                {
-                    frameReportQueue.Add(reportItem);
-                }
-
-                if (videoDict.TryGetValue(i, out var videoItem))
-                {
-                    frameVideoMatQueue.Add(videoItem);
-                }
+                if (reportDict.TryGetValue(i, out var reportItem)) { reportList.Add(reportItem); }
+                if (videoDict.TryGetValue(i, out var videoItem)) { videoList.Add(videoItem); }
             }
 
-            Console.WriteLine($"  Add+R comp {frameList[0].frameIndex} - {frameList[frameList.Count - 1].frameIndex}");
+            frameReportQueue.Add(reportList); qR += reportList.Count;
+            frameVideoMatQueue.Add(videoList); qV += videoList.Count;
         }
-
 
 
         string targetFilename = "";
@@ -656,6 +448,9 @@ namespace YoloPoseRun
         {
             try
             {
+                Stopwatch sw = new Stopwatch();
+                sw.Restart();
+
                 List<string> HeadKeyPoint = new List<string>();
                 List<string> NoseKeyPoint = new List<string>();
                 List<string> EyeKeyPoint = new List<string>();
@@ -677,43 +472,50 @@ namespace YoloPoseRun
 
                 while (!frameReportQueue.IsCompleted)
                 {
-                    if (frameReportQueue != null && frameReportQueue.TryTake(out FrameDataSet frameInfo, 10))
+                    if (frameReportQueue != null && frameReportQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        if (isFirst)
+                        qR -= frameList.Count;
+
+                        __debug_MessageWriteToConsole__($"TakeR\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
+                        foreach (var frameInfo in frameList)
                         {
-                            Console.WriteLine("Start:" + System.Reflection.MethodBase.GetCurrentMethod().Name);
-                            isFirst = false;
-                        }
+                            if (isFirst) { isFirst = false; }
 
-                        if (saveDirectoryPath != frameInfo.saveDirectoryPath)
-                        {
-                            if (PoseValue.Count > 0) File.AppendAllLines(pathPose, PoseValue);
-                            PoseValue.Clear();
-
-                            saveDirectoryPath = frameInfo.saveDirectoryPath;
-                            pathPose = Path.Combine(saveDirectoryPath, "Pose.csv");
-
-                            if (!File.Exists(pathPose))
+                            if (saveDirectoryPath != frameInfo.saveDirectoryPath)
                             {
-                                PoseValue.Add("filename,frame," + PoseInfo.ToLineStringHeader() + ",Label");
+                                if (PoseValue.Count > 0) File.AppendAllLines(pathPose, PoseValue);
+                                PoseValue.Clear();
+
+                                saveDirectoryPath = frameInfo.saveDirectoryPath;
+                                pathPose = Path.Combine(saveDirectoryPath, "Pose.csv");
+
+                                if (!File.Exists(pathPose))
+                                {
+                                    PoseValue.Add("filename,frame," + PoseInfo.ToLineStringHeader() + ",Label");
+                                }
+                            }
+
+                            if (frameInfo.frameIndex >= 0)
+                            {
+                                string posFrame = frameInfo.frameIndex.ToString();
+
+                                foreach (var pose in frameInfo.PoseInfos)
+                                {
+                                    string poseString = pose.ToLineString();
+                                    linePose = targetFilename + "," + posFrame + "," + poseString + ",-1";
+                                    PoseValue.Add(linePose);
+                                }
+                            }
+                            else
+                            {
+                                break;
                             }
                         }
 
-                        if (frameInfo.frameIndex >= 0)
-                        {
-                            string posFrame = frameInfo.frameIndex.ToString();
+                        __debug_MessageWriteToConsole__($"TaskR\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
-                            foreach (var pose in frameInfo.PoseInfos)
-                            {
-                                string poseString = pose.ToLineString();
-                                linePose = targetFilename + "," + posFrame + "," + poseString + ",-1";
-                                PoseValue.Add(linePose);
-                            }
-                        }
-                        else
-                        {
-                            break;
-                        }
+                        frameList.Clear();
                     }
                     else
                     {
@@ -759,38 +561,57 @@ namespace YoloPoseRun
             int frameIndex = 0;
             try
             {
+                Stopwatch sw = new Stopwatch();
+                sw.Restart();
+
                 string saveVideoPath = "";
                 string saveDirectoryPath = "";
                 VideoWriter videoWriter = null;
 
                 while (!frameVideoMatQueue.IsCompleted)
                 {
-                    if (frameVideoMatQueue.TryTake(out FrameDataSet frameInfo, 10))
+                    if (frameVideoMatQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        if(videoWriter != null && saveDirectoryPath != frameInfo.saveDirectoryPath)
+                        qV -= frameList.Count;
+
+                        __debug_MessageWriteToConsole__($"TakeV\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
+                        foreach (var frameInfo in frameList)
                         {
-                            videoWriter.Release();
-                            videoWriter.Dispose();
-                            videoWriter = null;
+                            if (videoWriter != null && saveDirectoryPath != frameInfo.saveDirectoryPath)
+                            {
+                                videoWriter.Release();
+                                videoWriter.Dispose();
+                                videoWriter = null;
+                            }
+
+                            if (videoWriter == null)
+                            {
+                                saveDirectoryPath = frameInfo.saveDirectoryPath;
+                                saveVideoPath = Path.Combine(saveDirectoryPath, Path.GetFileNameWithoutExtension(saveDirectoryPath) + "_pose.mp4");
+
+                                videoWriter = new VideoWriter(saveVideoPath, FourCC.FromString("mp4v"), 30, new OpenCvSharp.Size(640, 360));
+                                videoWriter.Set(VideoWriterProperties.HwAcceleration, (double)AVHWDeviceType.AV_HWDEVICE_TYPE_QSV);
+                            }
+
+                            if (!videoWriter.IsOpened())
+                            {
+                                Console.WriteLine("video not opened");
+                            }
+
+                            frameIndex = frameInfo.frameIndex;
+                            using (Mat mat = BitmapConverter.ToMat(frameInfo.bitmap))
+                            {
+                                Mat mat3C = mat.CvtColor(ColorConversionCodes.BGRA2BGR);
+                                videoWriter.Write(mat3C);
+                                mat3C.Dispose();
+                            }
+                            frameInfo.bitmap.Dispose();
                         }
 
-                        if (videoWriter == null)
-                        {
-                            saveDirectoryPath = frameInfo.saveDirectoryPath;
-                            saveVideoPath = Path.Combine(saveDirectoryPath, Path.GetFileNameWithoutExtension(saveDirectoryPath) + "_pose.mp4");
+                        __debug_MessageWriteToConsole__($"TaskV\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        frameList.Clear();
 
-                            videoWriter = new VideoWriter(saveVideoPath, FourCC.FromString("mp4v"), 30, new OpenCvSharp.Size(640, 360));
-                            videoWriter.Set(VideoWriterProperties.HwAcceleration, (double)AVHWDeviceType.AV_HWDEVICE_TYPE_QSV);
-                        }
-
-                        if (!videoWriter.IsOpened())
-                        {
-                            Console.WriteLine("video not opened");
-                        }
-
-                        frameIndex = frameInfo.frameIndex;
-                        videoWriter.Write(frameInfo.mat);
-                        frameInfo.mat.Dispose();
                     }
                 }
 
@@ -836,9 +657,22 @@ namespace YoloPoseRun
             }
         }
 
-        public static void getDebugInfo(string methodName, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
+        DateTime taskStartTime;
+        System.Timers.Timer timer1;
+        int qB = 0, qT = 0, qP = 0, qR = 0, qV = 0;
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            Console.WriteLine($"[{DeviceID}]\t{(DateTime.Now - taskStartTime).TotalMilliseconds:0}\tB{qB}\tT{qT}\tP{qP}\tR{qR}\tV{qV}");
+        }
+
+        public static void __debug_CodeInfoWriteToConsole__(string methodName, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
         {
             Console.WriteLine($"[{DateTime.Now:HH:mm:dd.sss}] {Path.GetFileName(filePath)}:{lineNumber} - {methodName}");
+        }
+
+        private void __debug_MessageWriteToConsole__(string message)
+        {
+            Console.WriteLine($"[{DeviceID}]\t{DateTime.Now:HH:mm:ss.fff}\t{(DateTime.Now - taskStartTime).TotalMilliseconds:0}\t" + message);
         }
 
     }
