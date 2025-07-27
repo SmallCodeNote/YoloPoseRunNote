@@ -1,12 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
 using System.IO;
-using System.Collections.Concurrent;
 using System.Threading.Tasks;
-using System.Diagnostics;
 
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -22,7 +21,6 @@ namespace YoloPoseRun
     {
         public string SessionInputName = "";
 
-        //public Tensor<float> ImageTensor;
         public List<PoseInfo> PoseInfos;
         private InferenceSession session;
         private int modelOutputStride = 8400;
