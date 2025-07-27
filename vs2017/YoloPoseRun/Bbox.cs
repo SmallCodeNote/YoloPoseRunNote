@@ -14,12 +14,24 @@ namespace YoloPoseRun
 
         public Bbox(float[] outputArray, int startIndex)
         {
+            int address = startIndex;
+            this.Center_x = outputArray[address]; address += stride;
+            this.Center_y = outputArray[address]; address += stride;
+            this.Width = outputArray[address]; address += stride;
+            this.Height = outputArray[address]; address += stride;
+            this.Confidence = outputArray[address]; address += stride;
+        }
+
+        /*
+        public Bbox(float[] outputArray, int startIndex)
+        {
             this.Center_x = outputArray[startIndex + stride * 0];
             this.Center_y = outputArray[startIndex + stride * 1];
             this.Width = outputArray[startIndex + stride * 2];
             this.Height = outputArray[startIndex + stride * 3];
             this.Confidence = outputArray[startIndex + stride * 4];
         }
+        */
 
         public float Left { get { return Center_x - Width / 2.0f; } }
         public float Right { get { return Center_x + Width / 2.0f; } }

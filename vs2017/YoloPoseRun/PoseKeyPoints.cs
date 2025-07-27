@@ -5,6 +5,7 @@ using System.Drawing;
 
 namespace YoloPoseRun
 {
+
     public class PoseKeyPoints
     {
         public KeyPoint Nose;
@@ -25,10 +26,24 @@ namespace YoloPoseRun
         public KeyPoint AnkleLeft;
         public KeyPoint AnkleRight;
 
+        private PoseInfo_ConfidenceLevel confidenceLevel;
+
         public PoseKeyPoints(float[] output, int startIndex, string ConfidenceParameterLinesString)
         {
             if (output == null) return;
+            poseKeyPointsInitialize(output,startIndex);
+            confidenceLevel.InitializeParamFromTextLines(ConfidenceParameterLinesString);
+        }
 
+        public PoseKeyPoints(float[] output, int startIndex, PoseInfo_ConfidenceLevel confidenceLevel)
+        {
+            if (output == null) return;
+            poseKeyPointsInitialize(output, startIndex);
+            this.confidenceLevel = confidenceLevel;
+        }
+
+        private void poseKeyPointsInitialize(float[] output, int startIndex)
+        {
             Nose = new KeyPoint(output, startIndex, 0);
             EyeLeft = new KeyPoint(output, startIndex, 1);
             EyeRight = new KeyPoint(output, startIndex, 2);
@@ -46,34 +61,11 @@ namespace YoloPoseRun
             KneeRight = new KeyPoint(output, startIndex, 14);
             AnkleLeft = new KeyPoint(output, startIndex, 15);
             AnkleRight = new KeyPoint(output, startIndex, 16);
-
-            InitializeParamFromTextLines(ConfidenceParameterLinesString);
         }
 
-        public float confidenceLevel_Nose = 0.6f;
-        public float confidenceLevel_Head = 0.6f;
-        public float confidenceLevel_Eye = 0.6f;
-        public float confidenceLevel_Ear = 0.6f;
-        public float confidenceLevel_Shoulder = 0.6f;
-        public float confidenceLevel_Elbow = 0.6f;
-        public float confidenceLevel_Wrist = 0.6f;
-        public float confidenceLevel_Hip = 0.6f;
-        public float confidenceLevel_Knee = 0.6f;
-        public float confidenceLevel_Ankle = 0.6f;
-
-        public void setConfidenceLevel(float confidenceLevel)
+        public void setConfidenceLevel(float commonConfidenceLevel)
         {
-            confidenceLevel_Nose = confidenceLevel;
-            confidenceLevel_Head = confidenceLevel;
-            confidenceLevel_Eye = confidenceLevel;
-            confidenceLevel_Ear = confidenceLevel;
-            confidenceLevel_Shoulder = confidenceLevel;
-            confidenceLevel_Elbow = confidenceLevel;
-            confidenceLevel_Wrist = confidenceLevel;
-            confidenceLevel_Hip = confidenceLevel;
-            confidenceLevel_Knee = confidenceLevel;
-            confidenceLevel_Ankle = confidenceLevel;
-
+            confidenceLevel.setKeypointsConfidenceLevel(commonConfidenceLevel);
         }
 
         public override string ToString()
@@ -86,40 +78,6 @@ namespace YoloPoseRun
                    $"{AnkleLeft.Confidence:0.00}, {AnkleRight.Confidence:0.00}";
         }
 
-        public void InitializeParamFromTextLines(string LinesString)
-        {
-            InitializeParamFromTextLines(LinesString.Replace("\r\n", "\n").Trim('\n').Split('\n'));
-        }
-
-        public void InitializeParamFromTextLines(string[] Lines)
-        {
-            foreach (var line in Lines)
-            {
-                var parts = line.Split('\t');
-                if (parts.Length != 2)
-                    continue;
-
-                string key = parts[0];
-                if (!float.TryParse(parts[1], out float value))
-                    continue;
-
-                switch (key)
-                {
-                    case nameof(confidenceLevel_Nose): confidenceLevel_Nose = value; break;
-                    case nameof(confidenceLevel_Head): confidenceLevel_Head = value; break;
-                    case nameof(confidenceLevel_Eye): confidenceLevel_Eye = value; break;
-                    case nameof(confidenceLevel_Ear): confidenceLevel_Ear = value; break;
-                    case nameof(confidenceLevel_Shoulder): confidenceLevel_Shoulder = value; break;
-                    case nameof(confidenceLevel_Elbow): confidenceLevel_Elbow = value; break;
-                    case nameof(confidenceLevel_Wrist): confidenceLevel_Wrist = value; break;
-                    case nameof(confidenceLevel_Hip): confidenceLevel_Hip = value; break;
-                    case nameof(confidenceLevel_Knee): confidenceLevel_Knee = value; break;
-                    case nameof(confidenceLevel_Ankle): confidenceLevel_Ankle = value; break;
-                    default: break;
-                }
-            }
-        }
-
         public string ParamToTextLinesString()
         {
             return string.Join("\r\n", ParamToTextLines());
@@ -129,16 +87,16 @@ namespace YoloPoseRun
         {
             return new string[]
             {
-                $"{nameof(confidenceLevel_Nose)}\t{confidenceLevel_Nose}",
-                $"{nameof(confidenceLevel_Head)}\t{confidenceLevel_Head}",
-                $"{nameof(confidenceLevel_Eye)}\t{confidenceLevel_Eye}",
-                $"{nameof(confidenceLevel_Ear)}\t{confidenceLevel_Ear}",
-                $"{nameof(confidenceLevel_Shoulder)}\t{confidenceLevel_Shoulder}",
-                $"{nameof(confidenceLevel_Elbow)}\t{confidenceLevel_Elbow}",
-                $"{nameof(confidenceLevel_Wrist)}\t{confidenceLevel_Wrist}",
-                $"{nameof(confidenceLevel_Hip)}\t{confidenceLevel_Hip}",
-                $"{nameof(confidenceLevel_Knee)}\t{confidenceLevel_Knee}",
-                $"{nameof(confidenceLevel_Ankle)}\t{confidenceLevel_Ankle}"
+                $"{nameof(confidenceLevel.Nose)}\t{confidenceLevel.Nose}",
+                $"{nameof(confidenceLevel.Head)}\t{confidenceLevel.Head}",
+                $"{nameof(confidenceLevel.Eye)}\t{confidenceLevel.Eye}",
+                $"{nameof(confidenceLevel.Ear)}\t{confidenceLevel.Ear}",
+                $"{nameof(confidenceLevel.Shoulder)}\t{confidenceLevel.Shoulder}",
+                $"{nameof(confidenceLevel.Elbow)}\t{confidenceLevel.Elbow}",
+                $"{nameof(confidenceLevel.Wrist)}\t{confidenceLevel.Wrist}",
+                $"{nameof(confidenceLevel.Hip)}\t{confidenceLevel.Hip}",
+                $"{nameof(confidenceLevel.Knee)}\t{confidenceLevel.Knee}",
+                $"{nameof(confidenceLevel.Ankle)}\t{confidenceLevel.Ankle}"
             };
         }
 
@@ -286,48 +244,48 @@ namespace YoloPoseRun
         public KeyPoint Knee(float confidenceLevel) { return KeyPointSum(KneeLeft, KneeRight, confidenceLevel); }
         public KeyPoint Ankle(float confidenceLevel) { return KeyPointSum(AnkleLeft, AnkleRight, confidenceLevel); }
 
-        public KeyPoint Head() { return KeyPointAve(confidenceLevel_Head, Nose, EyeLeft, EyeRight, EarLeft, EarRight); }
-        public KeyPoint Eye() { return KeyPointSum(EyeLeft, EyeRight, confidenceLevel_Eye); }
-        public KeyPoint Ear() { return KeyPointSum(EarLeft, EarRight, confidenceLevel_Ear); }
-        public KeyPoint Shoulder() { return KeyPointSum(ShoulderLeft, ShoulderRight, confidenceLevel_Shoulder); }
-        public KeyPoint Elbow() { return KeyPointSum(ElbowLeft, ElbowRight, confidenceLevel_Elbow); }
-        public KeyPoint Wrist() { return KeyPointSum(WristLeft, WristRight, confidenceLevel_Wrist); }
-        public KeyPoint Hip() { return KeyPointSum(HipLeft, HipRight, confidenceLevel_Hip); }
-        public KeyPoint Knee() { return KeyPointSum(KneeLeft, KneeRight, confidenceLevel_Knee); }
-        public KeyPoint Ankle() { return KeyPointSum(AnkleLeft, AnkleRight, confidenceLevel_Ankle); }
+        public KeyPoint Head() { return KeyPointAve(confidenceLevel.Head, Nose, EyeLeft, EyeRight, EarLeft, EarRight); }
+        public KeyPoint Eye() { return KeyPointSum(EyeLeft, EyeRight, confidenceLevel.Eye); }
+        public KeyPoint Ear() { return KeyPointSum(EarLeft, EarRight, confidenceLevel.Ear); }
+        public KeyPoint Shoulder() { return KeyPointSum(ShoulderLeft, ShoulderRight, confidenceLevel.Shoulder); }
+        public KeyPoint Elbow() { return KeyPointSum(ElbowLeft, ElbowRight, confidenceLevel.Elbow); }
+        public KeyPoint Wrist() { return KeyPointSum(WristLeft, WristRight, confidenceLevel.Wrist); }
+        public KeyPoint Hip() { return KeyPointSum(HipLeft, HipRight, confidenceLevel.Hip); }
+        public KeyPoint Knee() { return KeyPointSum(KneeLeft, KneeRight, confidenceLevel.Knee); }
+        public KeyPoint Ankle() { return KeyPointSum(AnkleLeft, AnkleRight, confidenceLevel.Ankle); }
 
-        public float ElbowLeftAngle { get { return KeyPointAngle(ElbowLeft, confidenceLevel_Elbow, ShoulderLeft, confidenceLevel_Shoulder, WristLeft, confidenceLevel_Wrist); } }
-        public float ElbowRightAngle { get { return KeyPointAngle(ElbowRight, confidenceLevel_Elbow, ShoulderRight, confidenceLevel_Shoulder, WristRight, confidenceLevel_Wrist); } }
-        public float KneeLeftAngle { get { return KeyPointAngle(KneeLeft, confidenceLevel_Knee, HipLeft, confidenceLevel_Hip, AnkleLeft, confidenceLevel_Ankle); } }
-        public float KneeRightAngle { get { return KeyPointAngle(KneeRight, confidenceLevel_Knee, HipRight, confidenceLevel_Hip, AnkleRight, confidenceLevel_Ankle); } }
+        public float ElbowLeftAngle { get { return KeyPointAngle(ElbowLeft, confidenceLevel.Elbow, ShoulderLeft, confidenceLevel.Shoulder, WristLeft, confidenceLevel.Wrist); } }
+        public float ElbowRightAngle { get { return KeyPointAngle(ElbowRight, confidenceLevel.Elbow, ShoulderRight, confidenceLevel.Shoulder, WristRight, confidenceLevel.Wrist); } }
+        public float KneeLeftAngle { get { return KeyPointAngle(KneeLeft, confidenceLevel.Knee, HipLeft, confidenceLevel.Hip, AnkleLeft, confidenceLevel.Ankle); } }
+        public float KneeRightAngle { get { return KeyPointAngle(KneeRight, confidenceLevel.Knee, HipRight, confidenceLevel.Hip, AnkleRight, confidenceLevel.Ankle); } }
 
-        public float ThighLeftTorsoAngle { get { return KeyPointAngle(HipLeft, confidenceLevel_Hip, KneeLeft, confidenceLevel_Knee, Hip(), confidenceLevel_Hip, Shoulder(), confidenceLevel_Shoulder); } }
-        public float ThighRightTorsoAngle { get { return KeyPointAngle(HipRight, confidenceLevel_Hip, KneeRight, confidenceLevel_Knee, Hip(), confidenceLevel_Hip, Shoulder(), confidenceLevel_Shoulder); } }
-        public float ArmLeftTorsoAngle { get { return KeyPointAngle(ShoulderLeft, confidenceLevel_Shoulder, ElbowLeft, confidenceLevel_Elbow, Shoulder(), confidenceLevel_Shoulder, Hip(), confidenceLevel_Hip); } }
-        public float ArmRightTorsoAngle { get { return KeyPointAngle(ShoulderRight, confidenceLevel_Shoulder, ElbowRight, confidenceLevel_Elbow, Shoulder(), confidenceLevel_Shoulder, Hip(), confidenceLevel_Hip); } }
+        public float ThighLeftTorsoAngle { get { return KeyPointAngle(HipLeft, confidenceLevel.Hip, KneeLeft, confidenceLevel.Knee, Hip(), confidenceLevel.Hip, Shoulder(), confidenceLevel.Shoulder); } }
+        public float ThighRightTorsoAngle { get { return KeyPointAngle(HipRight, confidenceLevel.Hip, KneeRight, confidenceLevel.Knee, Hip(), confidenceLevel.Hip, Shoulder(), confidenceLevel.Shoulder); } }
+        public float ArmLeftTorsoAngle { get { return KeyPointAngle(ShoulderLeft, confidenceLevel.Shoulder, ElbowLeft, confidenceLevel.Elbow, Shoulder(), confidenceLevel.Shoulder, Hip(), confidenceLevel.Hip); } }
+        public float ArmRightTorsoAngle { get { return KeyPointAngle(ShoulderRight, confidenceLevel.Shoulder, ElbowRight, confidenceLevel.Elbow, Shoulder(), confidenceLevel.Shoulder, Hip(), confidenceLevel.Hip); } }
 
-        public float WristLeftLength { get { return KeyPointLength(ElbowLeft, confidenceLevel_Elbow, WristLeft, confidenceLevel_Wrist); } }
-        public float WristRightLength { get { return KeyPointLength(ElbowRight, confidenceLevel_Elbow, WristRight, confidenceLevel_Wrist); } }
-        public float ElbowLeftLength { get { return KeyPointLength(ShoulderLeft, confidenceLevel_Shoulder, ElbowLeft, confidenceLevel_Elbow); } }
-        public float ElbowRightLength { get { return KeyPointLength(ShoulderRight, confidenceLevel_Shoulder, ElbowRight, confidenceLevel_Elbow); } }
-        public float KneeLeftLength { get { return KeyPointLength(HipLeft, confidenceLevel_Hip, KneeLeft, confidenceLevel_Knee); } }
-        public float KneeRightLength { get { return KeyPointLength(HipRight, confidenceLevel_Hip, KneeRight, confidenceLevel_Knee); } }
-        public float AnkleLeftLength { get { return KeyPointLength(KneeLeft, confidenceLevel_Knee, AnkleLeft, confidenceLevel_Ankle); } }
-        public float AnkleRightLength { get { return KeyPointLength(KneeRight, confidenceLevel_Knee, AnkleRight, confidenceLevel_Ankle); } }
+        public float WristLeftLength { get { return KeyPointLength(ElbowLeft, confidenceLevel.Elbow, WristLeft, confidenceLevel.Wrist); } }
+        public float WristRightLength { get { return KeyPointLength(ElbowRight, confidenceLevel.Elbow, WristRight, confidenceLevel.Wrist); } }
+        public float ElbowLeftLength { get { return KeyPointLength(ShoulderLeft, confidenceLevel.Shoulder, ElbowLeft, confidenceLevel.Elbow); } }
+        public float ElbowRightLength { get { return KeyPointLength(ShoulderRight, confidenceLevel.Shoulder, ElbowRight, confidenceLevel.Elbow); } }
+        public float KneeLeftLength { get { return KeyPointLength(HipLeft, confidenceLevel.Hip, KneeLeft, confidenceLevel.Knee); } }
+        public float KneeRightLength { get { return KeyPointLength(HipRight, confidenceLevel.Hip, KneeRight, confidenceLevel.Knee); } }
+        public float AnkleLeftLength { get { return KeyPointLength(KneeLeft, confidenceLevel.Knee, AnkleLeft, confidenceLevel.Ankle); } }
+        public float AnkleRightLength { get { return KeyPointLength(KneeRight, confidenceLevel.Knee, AnkleRight, confidenceLevel.Ankle); } }
 
-        public float TorsoLength { get { return KeyPointLength(Shoulder(), confidenceLevel_Shoulder, Hip(), confidenceLevel_Hip); } }
-        public float ShoulderWidth { get { return KeyPointAngleXLength(Head(), confidenceLevel_Head, ShoulderLeft, confidenceLevel_Shoulder, ShoulderRight, confidenceLevel_Shoulder); } }
+        public float TorsoLength { get { return KeyPointLength(Shoulder(), confidenceLevel.Shoulder, Hip(), confidenceLevel.Hip); } }
+        public float ShoulderWidth { get { return KeyPointAngleXLength(Head(), confidenceLevel.Head, ShoulderLeft, confidenceLevel.Shoulder, ShoulderRight, confidenceLevel.Shoulder); } }
 
-        public float HipWidth { get { return KeyPointAngleXLength(Shoulder(), confidenceLevel_Shoulder, HipLeft, confidenceLevel_Hip, HipRight, confidenceLevel_Hip); } }
-        public float EyeWidth { get { return KeyPointAngleXLength(Shoulder(), confidenceLevel_Shoulder, EyeRight, confidenceLevel_Eye, EyeLeft, confidenceLevel_Eye); } }
-        public float EarWidth { get { return KeyPointAngleXLength(Shoulder(), confidenceLevel_Shoulder, EarRight, confidenceLevel_Ear, EarLeft, confidenceLevel_Ear); } }
+        public float HipWidth { get { return KeyPointAngleXLength(Shoulder(), confidenceLevel.Shoulder, HipLeft, confidenceLevel.Hip, HipRight, confidenceLevel.Hip); } }
+        public float EyeWidth { get { return KeyPointAngleXLength(Shoulder(), confidenceLevel.Shoulder, EyeRight, confidenceLevel.Eye, EyeLeft, confidenceLevel.Eye); } }
+        public float EarWidth { get { return KeyPointAngleXLength(Shoulder(), confidenceLevel.Shoulder, EarRight, confidenceLevel.Ear, EarLeft, confidenceLevel.Ear); } }
 
         public float HeadYawAngle
         {
             get
             {
-                double dLeft = KeyPointLength(Nose, confidenceLevel_Nose, EarLeft, confidenceLevel_Ear);
-                double dRight = KeyPointLength(Nose, confidenceLevel_Nose, EarRight, confidenceLevel_Ear);
+                double dLeft = KeyPointLength(Nose, confidenceLevel.Nose, EarLeft, confidenceLevel.Ear);
+                double dRight = KeyPointLength(Nose, confidenceLevel.Nose, EarRight, confidenceLevel.Ear);
                 double sum = dLeft + dRight;
                 if (sum == 0)
                     return -1;
@@ -356,8 +314,6 @@ namespace YoloPoseRun
                 return (float)(Math.Atan2(ShoulderRight.Y - ShoulderLeft.Y, ShoulderRight.X - ShoulderLeft.X) * (180.0 / Math.PI));
             }
         }
-
-
 
         public void drawBone(Graphics g, float confidenceLevel = 0.6f, float diameter = 8)
         {
@@ -461,7 +417,6 @@ namespace YoloPoseRun
             }
             centerX /= points.Count;
             centerY /= points.Count;
-
 
             points.Sort((a, b) =>
             {
@@ -694,13 +649,23 @@ namespace YoloPoseRun
             float radius = (diameter / 2.0f);
             return new Rectangle((int)(X - radius), (int)(Y - radius), (int)diameter, (int)diameter);
         }
-
+        /*
         public KeyPoint(float[] output, int startIndex, int keyIndex)
         {
             this.X = output[startIndex + stride * (keyIndex * 3 + 5)];
             this.Y = output[startIndex + stride * (keyIndex * 3 + 6)];
             this.Confidence = output[startIndex + stride * (keyIndex * 3 + 7)];
         }
+        */
+
+        public KeyPoint(float[] output, int startIndex, int keyIndex)
+        {
+            int address = startIndex + stride * (keyIndex * 3 + 5);
+            this.X = output[address]; address += stride;
+            this.Y = output[address]; address += stride;
+            this.Confidence = output[address];
+        }
+
 
         public KeyPoint(float X, float Y, float Confidence)
         {

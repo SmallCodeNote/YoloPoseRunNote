@@ -4,11 +4,17 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Linq;
 using System.IO;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
+using System.Diagnostics;
 
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
 using OpenCvSharp;
+
+using System.Runtime.CompilerServices;
+
 
 namespace YoloPoseRun
 {
@@ -16,71 +22,29 @@ namespace YoloPoseRun
     {
         public string SessionInputName = "";
 
-        public Tensor<float> ImageTensor;
+        //public Tensor<float> ImageTensor;
         public List<PoseInfo> PoseInfos;
         private InferenceSession session;
         private int modelOutputStride = 8400;
 
-        public float ConfidenceThreshold = 0.16f;
-        public float OverlapBBoxThreshold = 0.8f;
-        public float OverlapTolsoThreshold = 0.8f;
-        public float OverlapShoulderThreshold = 0.8f;
+        public PoseInfo_ConfidenceLevel ConfidenceSetting;
+        public PoseInfo_OverLapThresholds OverLapSetting;
 
-        public string ConfidenceParameterLinesString = "";
-
-
-        public YoloPoseModelHandle(string modelfilePath, int deviceID = -1, string ConfidenceParameterLinesString = "")
+        public YoloPoseModelHandle(string modelfilePath, int deviceID = -1)
         {
             SetModel(modelfilePath, deviceID);
-            this.ConfidenceParameterLinesString = ConfidenceParameterLinesString;
+        }
+        public YoloPoseModelHandle(string modelfilePath, PoseInfo_ConfidenceLevel confidenceSetting, PoseInfo_OverLapThresholds overLapSetting, int deviceID = -1)
+        {
+            SetModel(modelfilePath, deviceID);
+            this.ConfidenceSetting = confidenceSetting;
+            this.OverLapSetting = overLapSetting;
         }
 
         public void Dispose()
         {
             if (session != null) session.Dispose();
             GC.SuppressFinalize(this);
-        }
-
-        public void InitializeParamFromTextLines(string LinesString)
-        {
-            InitializeParamFromTextLines(LinesString.Replace("\r\n", "\n").Trim('\n').Split('\n'));
-        }
-        public void InitializeParamFromTextLines(string[] Lines)
-        {
-            foreach (var line in Lines)
-            {
-                var parts = line.Split('\t');
-                if (parts.Length != 2)
-                    continue;
-
-                string key = parts[0];
-                if (!float.TryParse(parts[1], out float value))
-                    continue;
-
-                switch (key)
-                {
-                    case nameof(ConfidenceThreshold): ConfidenceThreshold = value; break;
-                    case nameof(OverlapBBoxThreshold): OverlapBBoxThreshold = value; break;
-                    case nameof(OverlapTolsoThreshold): OverlapTolsoThreshold = value; break;
-                    case nameof(OverlapShoulderThreshold): OverlapShoulderThreshold = value; break;
-                    default: break;
-                }
-            }
-        }
-
-        public string ParamToTextLinesString()
-        {
-            return string.Join("\r\n", ParamToTextLines());
-        }
-        public string[] ParamToTextLines()
-        {
-            return new string[]
-            {
-                $"{nameof(ConfidenceThreshold)}\t{ConfidenceThreshold}",
-                $"{nameof(OverlapBBoxThreshold)}\t{OverlapBBoxThreshold}",
-                $"{nameof(OverlapTolsoThreshold)}\t{OverlapTolsoThreshold}",
-                $"{nameof(OverlapShoulderThreshold)}\t{OverlapShoulderThreshold}"
-            };
         }
 
         public bool SetModel(string modelfilePath, int deviceID = -1)
@@ -109,30 +73,6 @@ namespace YoloPoseRun
                 SessionInputName = session.InputMetadata.Keys.First();
             }
             return false;
-        }
-
-        public List<PoseInfo> Predict(Bitmap bitmap, float confidenceThreshold = -1.0f)
-        {
-            if (confidenceThreshold < 0) { confidenceThreshold = ConfidenceThreshold; }
-            ImageTensor = ConvertBitmapToTensor(bitmap);
-
-            var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(SessionInputName, ImageTensor) };
-            var results = session.Run(inputs);
-            var output = results.First().AsEnumerable<float>().ToArray();
-            results.Dispose();
-
-            return PoseInfoRead(output, confidenceThreshold);
-        }
-
-        public List<PoseInfo> Predict(Tensor<float> ImageTensor, float confidenceThreshold = -1.0f)
-        {
-            var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(SessionInputName, ImageTensor) };
-            var results = session.Run(inputs);
-            var output = results.First().AsEnumerable<float>().ToArray();
-            results.Dispose();
-
-            if (confidenceThreshold < 0) { confidenceThreshold = ConfidenceThreshold; }
-            return PoseInfoRead(output, confidenceThreshold);
         }
 
         public float[] PredictOutput(Tensor<float> ImageTensor, float confidenceThreshold = -1.0f)
@@ -255,58 +195,74 @@ namespace YoloPoseRun
             return SessionInputName;
         }
 
-        public List<PoseInfo> PoseInfoRead(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results, float confidenceThreshold = -1.0f)
+        public List<PoseInfo> PoseInfoRead(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results)
         {
             float[] outputArray = results.First().AsEnumerable<float>().ToArray();
-            return PoseInfoRead(outputArray, confidenceThreshold);
+            var result = PoseInfoRead(outputArray);
+            return result;
         }
-
-        public void SetOverlapThreshold(float OverlapBBoxThreshold, float OverlapTolsoThreshold, float OverlapShoulderThreshold)
+       
+        public List<PoseInfo> PoseInfoRead(float[] outputArray)
         {
-            this.OverlapBBoxThreshold = OverlapBBoxThreshold;
-            this.OverlapTolsoThreshold = OverlapTolsoThreshold;
-            this.OverlapShoulderThreshold = OverlapShoulderThreshold;
-        }
 
-        public List<PoseInfo> PoseInfoRead(float[] outputArray, float confidenceThreshold = -1.0f)
-        {
-            if (confidenceThreshold < 0) { confidenceThreshold = ConfidenceThreshold; }
-            List<PoseInfo> PoseInfos = new List<PoseInfo>();
-            for (int i = 0; i < modelOutputStride; i++)
+            var poseInfosBaseQueue = new ConcurrentQueue<List<PoseInfo>>();
+            int modelOutputStrideSplit = 105;
+            int paraMax = modelOutputStride / modelOutputStrideSplit;
+            Parallel.For(0, paraMax, paraIndex =>
             {
-                PoseInfo pi = new PoseInfo(outputArray, i, ConfidenceParameterLinesString);
-                if (pi.Bbox.Confidence >= confidenceThreshold)
+                List<PoseInfo> poseInParallelForList = new List<PoseInfo>();
+                int iMax = (paraIndex + 1) * modelOutputStrideSplit;
+                for (int i = paraIndex * modelOutputStrideSplit; i < iMax; i++)
                 {
-                    if (PoseInfos.Count > 0)
-                    {
-                        bool update = false;
-
-                        for (int index = 0; index < PoseInfos.Count; index++)
-                        {
-                            var item = PoseInfos[index];
-
-                            bool flag_OverlapBBox = item.OverlapBbox(pi) >= OverlapBBoxThreshold && OverlapBBoxThreshold >= 0;
-                            bool flag_OverlapTolso = item.OverlapTolso(pi) >= OverlapTolsoThreshold && OverlapTolsoThreshold >= 0;
-                            bool flag_OverlapShoulder = item.OverlapShoulder(pi) >= OverlapShoulderThreshold && OverlapShoulderThreshold >= 0;
-
-                            if (flag_OverlapBBox || flag_OverlapTolso || flag_OverlapShoulder)
-                            {
-                                item.Merge(pi);
-                                update = true;
-                            }
-                        }
-
-                        if (!update) PoseInfos.Add(pi);
-                    }
-                    else
-                    {
-                        PoseInfos.Add(pi);
-                    }
+                    PoseInfo pi = new PoseInfo(outputArray, i, ConfidenceSetting);
+                    if (pi.Bbox.Confidence >= ConfidenceSetting.Bbox) { poseInParallelForList.Add(pi); }
                 }
+                poseInfosBaseQueue.Enqueue(poseInParallelForList);
+            });
+
+            List<PoseInfo> PoseInfosBaseList = new List<PoseInfo>();
+
+            while (poseInfosBaseQueue.TryDequeue(out var poseInfosBase))
+            {
+                PoseInfosBaseList.AddRange(poseInfosBase);
+            }
+
+            List<PoseInfo> PoseInfos = new List<PoseInfo>();
+            int PoseInfos_Count = PoseInfos.Count;
+            bool storedData = false;
+
+            int PoseInfosBaseList_Count = PoseInfosBaseList.Count;
+            for (int a = 0; a < PoseInfosBaseList_Count; a++)
+            {
+                var poseA = PoseInfosBaseList[a];
+
+                PoseInfos_Count = PoseInfos.Count;
+                storedData = false;
+                for (int b = 0; b < PoseInfos_Count; b++)
+                {
+                    var poseB = PoseInfos[b];
+                    if (poseA.OverlapBbox(poseB) >= OverLapSetting.OverlapBBoxThreshold && OverLapSetting.OverlapBBoxThreshold >= 0
+                        || poseA.OverlapTolso(poseB) >= OverLapSetting.OverlapTolsoThreshold && OverLapSetting.OverlapTolsoThreshold >= 0
+                        || poseA.OverlapShoulder(poseB) >= OverLapSetting.OverlapShoulderThreshold && OverLapSetting.OverlapShoulderThreshold >= 0
+                        )
+                    {
+                        poseB.Merge(poseA);
+                        storedData = true;
+                    }
+
+                }
+
+                if (!storedData) { PoseInfos.Add(poseA); }
             }
 
             this.PoseInfos = PoseInfos;
             return PoseInfos;
         }
+
+        private void __debug_MessageWriteToConsole__(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
+        {
+            Console.WriteLine($"[-]\t{DateTime.Now:HH:mm:ss.fff}\t{0}\t{Path.GetFileName(filePath)}:{lineNumber}\t" + message);
+        }
+
     }
 }

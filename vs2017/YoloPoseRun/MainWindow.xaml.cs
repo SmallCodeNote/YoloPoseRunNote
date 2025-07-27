@@ -224,9 +224,12 @@ namespace YoloPoseRun
 
         private void Button_getDefaultConfidence_Click(object sender, RoutedEventArgs e)
         {
-            YoloPoseModelHandle y = new YoloPoseModelHandle("");
+             YoloPoseModelHandle y = new YoloPoseModelHandle("");
             PoseKeyPoints k = new PoseKeyPoints(null,-1,"");
-            textBox_initializeLinesString.Text = y.ParamToTextLinesString()+"\r\n"+ k.ParamToTextLinesString();
+            PoseInfo_ConfidenceLevel c = new PoseInfo_ConfidenceLevel();
+            PoseInfo_OverLapThresholds o = new PoseInfo_OverLapThresholds();
+
+            textBox_initializeLinesString.Text = o.ParamToTextLinesString()+"\r\n"+ c.ParamToTextLinesString();
             y.Dispose();
         }
 

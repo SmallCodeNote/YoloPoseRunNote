@@ -33,7 +33,8 @@ namespace YoloPoseRun
         VideoCapture videoSource;
         YoloPoseModelHandle yoloPoseModelHandle;
 
-        public string ConfidenceParameterLinesString;
+        public PoseInfo_ConfidenceLevel ConfidenceLevelSetting;
+        public PoseInfo_OverLapThresholds OverLapThresholdsSetting;
         public int DeviceID = -2;
 
         BlockingCollection<string> videoSourceFilePathQueue;
@@ -46,9 +47,10 @@ namespace YoloPoseRun
 
             if (File.Exists(modelFilePath))
             {
-                yoloPoseModelHandle = new YoloPoseModelHandle(modelFilePath, deviceID, ConfidenceParameterLinesString);
+                ConfidenceLevelSetting = new PoseInfo_ConfidenceLevel(ConfidenceParameterLinesString);
+                OverLapThresholdsSetting = new PoseInfo_OverLapThresholds(ConfidenceParameterLinesString);
+                yoloPoseModelHandle = new YoloPoseModelHandle(modelFilePath, ConfidenceLevelSetting, OverLapThresholdsSetting, deviceID);
             }
-            this.ConfidenceParameterLinesString = ConfidenceParameterLinesString;
         }
 
         public void Dispose()
@@ -256,11 +258,12 @@ namespace YoloPoseRun
                 {
                     if (frameBitmapQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        qB -= frameList.Count;
+                        int frameList_Count = frameList.Count;
+                        qB -= frameList_Count;
 
-                        __debug_MessageWriteToConsole__($"TakeB\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        __debug_MessageWriteToConsole__($"TakeB\t{frameList[0].frameIndex}\t{ frameList_Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
-                        Parallel.For(0, frameList.Count, index =>
+                        Parallel.For(0, frameList_Count, index =>
                         {
                             var frameInfo = frameList[index];
                             Tensor<float> tensor = ConvertBitmapToTensor(frameInfo.bitmap);
@@ -268,9 +271,9 @@ namespace YoloPoseRun
                         }
                         );
 
-                        __debug_MessageWriteToConsole__($"TaskT\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
-                        frameTensorQueue.Add(frameList); qT += frameList.Count;
-                        __debug_MessageWriteToConsole__($"Add_T\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        __debug_MessageWriteToConsole__($"TaskT\t{frameList[0].frameIndex}\t{ frameList_Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        frameTensorQueue.Add(frameList); qT += frameList_Count;
+                        __debug_MessageWriteToConsole__($"Add_T\t{frameList[0].frameIndex}\t{ frameList_Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
                     }
                 }
 
@@ -337,39 +340,37 @@ namespace YoloPoseRun
                 {
                     if (frameTensorQueue.TryTake(out List<FrameDataSet> frameList, 10))
                     {
-                        qT -= frameList.Count;
-                        __debug_MessageWriteToConsole__($"TakeT\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
-
-                        //PredictBatch(frameList);
-
-                        if (frameList.Count < 1) continue;
-
                         int frameList_Count = frameList.Count;
+                        qT -= frameList_Count;
+                        __debug_MessageWriteToConsole__($"TakeT\t{frameList[0].frameIndex}\t{frameList_Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+
+                        if (frameList_Count < 1) continue;
+
 
                         for (int i = 0; i < frameList_Count; i++)
                         {
                             frameList[i].results = yoloPoseModelHandle.PredicteResults(frameList[i].inputs);
                         }
 
-                        __debug_MessageWriteToConsole__($"TaskP\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        __debug_MessageWriteToConsole__($"TaskP\t{frameList[0].frameIndex}\t{frameList_Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
-                        framePoseInfoQueue.Add(frameList); qP += frameList.Count;
+                        framePoseInfoQueue.Add(frameList); qP += frameList_Count;
 
-                        __debug_MessageWriteToConsole__($"Add_P\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
+                        __debug_MessageWriteToConsole__($"Add_P\t{frameList[0].frameIndex}\t{frameList_Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
 
                     }
                 }
 
                 framePoseInfoQueue.CompleteAdding();
 
-                Console.WriteLine($"Complete: {maxIndex} {System.Reflection.MethodBase.GetCurrentMethod().Name}");
+                __debug_MessageWriteToConsole__($"Complete: {maxIndex} {System.Reflection.MethodBase.GetCurrentMethod().Name}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
             }
         }
-        
+
         private void dequeue_framePoseInfo()
         {
             try
@@ -403,44 +404,54 @@ namespace YoloPoseRun
 
         private void drawPoseAndAddQueues(List<FrameDataSet> frameList)
         {
-            if (frameList.Count < 1) return;
-
-            var reportDict = new ConcurrentDictionary<int, FrameDataSet>();
-            var videoDict = new ConcurrentDictionary<int, FrameDataSet>();
-
-            Parallel.For(0, frameList.Count, index =>
+            try
             {
-                var frameInfo = frameList[index];
-                var poseInfos = yoloPoseModelHandle.PoseInfoRead(frameInfo.results);
-                frameInfo.results.Dispose();
-                frameInfo.PoseInfos = poseInfos;
+                if (frameList.Count < 1) return;
 
-                reportDict[index] = new FrameDataSet(poseInfos, frameInfo.frameIndex, frameInfo.saveDirectoryPath);
+                var reportArray = new FrameDataSet[frameList.Count];
+                var videoArray = new FrameDataSet[frameList.Count];
 
-                if (frameInfo.bitmap != null)
+                int frameList_Count = frameList.Count;
+                Parallel.For(0, frameList_Count, i =>
                 {
-                    drawPose(frameInfo.bitmap, poseInfos);
-                    videoDict[index] = frameInfo;
-                }
-                else
-                {
-                    Console.WriteLine($"ERROR: {System.Reflection.MethodBase.GetCurrentMethod().Name}  Null Bitmap");
-                }
-            });
+                    try
+                    {
+                        var frameInfo = frameList[i];
+                        var poseInfos = yoloPoseModelHandle.PoseInfoRead(frameInfo.results);
+                        frameInfo.results.Dispose();
+                        frameInfo.PoseInfos = poseInfos;
 
-            List<FrameDataSet> reportList = new List<FrameDataSet>(frameList.Count);
-            List<FrameDataSet> videoList = new List<FrameDataSet>(frameList.Count);
+                        reportArray[i] = new FrameDataSet(poseInfos, frameInfo.frameIndex, frameInfo.saveDirectoryPath);
+                        if (frameInfo.bitmap != null)
+                        {
+                            drawPose(frameInfo.bitmap, poseInfos);
+                            videoArray[i] = frameInfo;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"ERROR: {System.Reflection.MethodBase.GetCurrentMethod().Name}  Null Bitmap");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
 
-            for (int i = 0; i < frameList.Count; i++)
-            {
-                if (reportDict.TryGetValue(i, out var reportItem)) { reportList.Add(reportItem); }
-                if (videoDict.TryGetValue(i, out var videoItem)) { videoList.Add(videoItem); }
+                    }
+
+                });
+
+                List<FrameDataSet> reportList = new List<FrameDataSet>(reportArray);
+                List<FrameDataSet> videoList = new List<FrameDataSet>(videoArray);
+
+                frameReportQueue.Add(reportList); qR += reportList.Count;
+                frameVideoMatQueue.Add(videoList); qV += videoList.Count;
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR:{System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
 
-            frameReportQueue.Add(reportList); qR += reportList.Count;
-            frameVideoMatQueue.Add(videoList); qV += videoList.Count;
+            }
         }
-
 
         string targetFilename = "";
 
@@ -451,24 +462,11 @@ namespace YoloPoseRun
                 Stopwatch sw = new Stopwatch();
                 sw.Restart();
 
-                List<string> HeadKeyPoint = new List<string>();
-                List<string> NoseKeyPoint = new List<string>();
-                List<string> EyeKeyPoint = new List<string>();
-                List<string> EarKeyPoint = new List<string>();
-                List<string> ShoulderKeyPoint = new List<string>();
-                List<string> ElbowKeyPoint = new List<string>();
-                List<string> WristKeyPoint = new List<string>();
-                List<string> HipKeyPoint = new List<string>();
-                List<string> KneeKeyPoint = new List<string>();
-                List<string> AnkleKeyPoint = new List<string>();
-
                 List<string> PoseValue = new List<string>();
 
                 string saveDirectoryPath = "";
                 string pathPose = Path.Combine(saveDirectoryPath, "Pose.csv");
                 string linePose = "";
-
-                bool isFirst = true;
 
                 while (!frameReportQueue.IsCompleted)
                 {
@@ -480,8 +478,6 @@ namespace YoloPoseRun
 
                         foreach (var frameInfo in frameList)
                         {
-                            if (isFirst) { isFirst = false; }
-
                             if (saveDirectoryPath != frameInfo.saveDirectoryPath)
                             {
                                 if (PoseValue.Count > 0) File.AppendAllLines(pathPose, PoseValue);
@@ -512,9 +508,7 @@ namespace YoloPoseRun
                                 break;
                             }
                         }
-
                         __debug_MessageWriteToConsole__($"TaskR\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
-
                         frameList.Clear();
                     }
                     else
@@ -602,11 +596,23 @@ namespace YoloPoseRun
                             frameIndex = frameInfo.frameIndex;
                             using (Mat mat = BitmapConverter.ToMat(frameInfo.bitmap))
                             {
+                                Task.Run(() =>
+                                {
+                                    try
+                                    {
+                                        frameInfo.bitmap.Dispose();
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"ERROR: frameIndex={frameIndex} : {System.Reflection.MethodBase.GetCurrentMethod().Name} {ex.Message} {ex.StackTrace}");
+                                    }
+                                });
+
                                 Mat mat3C = mat.CvtColor(ColorConversionCodes.BGRA2BGR);
                                 videoWriter.Write(mat3C);
                                 mat3C.Dispose();
                             }
-                            frameInfo.bitmap.Dispose();
+
                         }
 
                         __debug_MessageWriteToConsole__($"TaskV\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
@@ -670,9 +676,9 @@ namespace YoloPoseRun
             Console.WriteLine($"[{DateTime.Now:HH:mm:dd.sss}] {Path.GetFileName(filePath)}:{lineNumber} - {methodName}");
         }
 
-        private void __debug_MessageWriteToConsole__(string message)
+        private void __debug_MessageWriteToConsole__(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
         {
-            Console.WriteLine($"[{DeviceID}]\t{DateTime.Now:HH:mm:ss.fff}\t{(DateTime.Now - taskStartTime).TotalMilliseconds:0}\t" + message);
+            Console.WriteLine($"[{DeviceID}]\t{DateTime.Now:HH:mm:ss.fff}\t{(DateTime.Now - taskStartTime).TotalMilliseconds:0}\t{Path.GetFileName(filePath)}:{lineNumber}\t" + message);
         }
 
     }

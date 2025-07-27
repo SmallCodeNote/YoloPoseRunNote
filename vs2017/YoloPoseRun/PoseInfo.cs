@@ -1,19 +1,182 @@
 ﻿using System;
 using System.Linq;
 using System.Text;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.IO;
 
 namespace YoloPoseRun
 {
+    public class PoseInfo_ConfidenceLevel
+    {
+        public float Bbox = 0.16f;
+
+        public float Nose = 0.6f;
+        public float Head = 0.6f;
+        public float Eye = 0.6f;
+        public float Ear = 0.6f;
+        public float Shoulder = 0.6f;
+        public float Elbow = 0.6f;
+        public float Wrist = 0.6f;
+        public float Hip = 0.6f;
+        public float Knee = 0.6f;
+        public float Ankle = 0.6f;
+
+        public PoseInfo_ConfidenceLevel()
+        {
+        }
+
+        public PoseInfo_ConfidenceLevel(string ConfidenceParameterLinesString)
+        {
+            InitializeParamFromTextLines(ConfidenceParameterLinesString);
+        }
+
+        public void InitializeParamFromTextLines(string LinesString)
+        {
+            InitializeParamFromTextLines(LinesString.Replace("\r\n", "\n").Trim('\n').Split('\n'));
+        }
+
+        public void InitializeParamFromTextLines(string[] Lines)
+        {
+            foreach (var line in Lines)
+            {
+                var parts = line.Split('\t');
+                if (parts.Length != 2)
+                    continue;
+
+                string key = parts[0];
+                if (!float.TryParse(parts[1], out float value))
+                    continue;
+
+                switch (key)
+                {
+                    case nameof(Bbox): Bbox = value; break;
+                    case nameof(Nose): Nose = value; break;
+                    case nameof(Head): Head = value; break;
+                    case nameof(Eye): Eye = value; break;
+                    case nameof(Ear): Ear = value; break;
+                    case nameof(Shoulder): Shoulder = value; break;
+                    case nameof(Elbow): Elbow = value; break;
+                    case nameof(Wrist): Wrist = value; break;
+                    case nameof(Hip): Hip = value; break;
+                    case nameof(Knee): Knee = value; break;
+                    case nameof(Ankle): Ankle = value; break;
+                    default: break;
+                }
+            }
+        }
+
+        public void setKeypointsConfidenceLevel(float commonConfidenceLevel)
+        {
+            Nose = commonConfidenceLevel;
+            Head = commonConfidenceLevel;
+            Eye = commonConfidenceLevel;
+            Ear = commonConfidenceLevel;
+            Shoulder = commonConfidenceLevel;
+            Elbow = commonConfidenceLevel;
+            Wrist = commonConfidenceLevel;
+            Hip = commonConfidenceLevel;
+            Knee = commonConfidenceLevel;
+            Ankle = commonConfidenceLevel;
+        }
+
+
+        public string ParamToTextLinesString()
+        {
+            return string.Join("\r\n", ParamToTextLines());
+        }
+
+        public string[] ParamToTextLines()
+        {
+            return new string[]
+            {
+                $"{nameof(Bbox)}\t{Bbox}",
+                $"{nameof(Nose)}\t{Nose}",
+                $"{nameof(Head)}\t{Head}",
+                $"{nameof(Eye)}\t{Eye}",
+                $"{nameof(Ear)}\t{Ear}",
+                $"{nameof(Shoulder)}\t{Shoulder}",
+                $"{nameof(Elbow)}\t{Elbow}",
+                $"{nameof(Wrist)}\t{Wrist}",
+                $"{nameof(Hip)}\t{Hip}",
+                $"{nameof(Knee)}\t{Knee}",
+                $"{nameof(Ankle)}\t{Ankle}"
+            };
+        }
+    }
+
+    public class PoseInfo_OverLapThresholds
+    {
+        public float OverlapBBoxThreshold = 0.8f;
+        public float OverlapTolsoThreshold = 0.8f;
+        public float OverlapShoulderThreshold = 0.8f;
+
+        public PoseInfo_OverLapThresholds()
+        {
+        }
+
+        public PoseInfo_OverLapThresholds(string LinesString)
+        {
+            InitializeParamFromTextLines(LinesString);
+        }
+
+        public void InitializeParamFromTextLines()
+        {
+
+        }
+        public void InitializeParamFromTextLines(string LinesString)
+        {
+            InitializeParamFromTextLines(LinesString.Replace("\r\n", "\n").Trim('\n').Split('\n'));
+        }
+        public void InitializeParamFromTextLines(string[] Lines)
+        {
+            foreach (var line in Lines)
+            {
+                var parts = line.Split('\t');
+                if (parts.Length != 2)
+                    continue;
+
+                string key = parts[0];
+                if (!float.TryParse(parts[1], out float value))
+                    continue;
+
+                switch (key)
+                {
+                    case nameof(OverlapBBoxThreshold): OverlapBBoxThreshold = value; break;
+                    case nameof(OverlapTolsoThreshold): OverlapTolsoThreshold = value; break;
+                    case nameof(OverlapShoulderThreshold): OverlapShoulderThreshold = value; break;
+                    default: break;
+                }
+            }
+        }
+
+        public string ParamToTextLinesString()
+        {
+            return string.Join("\r\n", ParamToTextLines());
+        }
+
+        public string[] ParamToTextLines()
+        {
+            return new string[]
+            {
+                $"{nameof(OverlapBBoxThreshold)}\t{OverlapBBoxThreshold}",
+                $"{nameof(OverlapTolsoThreshold)}\t{OverlapTolsoThreshold}",
+                $"{nameof(OverlapShoulderThreshold)}\t{OverlapShoulderThreshold}"
+            };
+        }
+
+    }
+
+
     public class PoseInfo
     {
         public Bbox Bbox;
         public PoseKeyPoints KeyPoints;
 
-
-        public PoseInfo(float[] outputArray, int startIndex, string ConfidenceParameterLinesString)
+        public PoseInfo(float[] outputArray, int startIndex, PoseInfo_ConfidenceLevel confidenceLevel)
         {
             Bbox = new Bbox(outputArray, startIndex);
-            KeyPoints = new PoseKeyPoints(outputArray, startIndex, ConfidenceParameterLinesString);
+            KeyPoints = new PoseKeyPoints(outputArray, startIndex, confidenceLevel);
         }
 
         static public string ToLineStringHeader()
@@ -119,6 +282,17 @@ namespace YoloPoseRun
         {
             this.KeyPoints.Merge(poseInfo.KeyPoints);
             this.Bbox.Merge(poseInfo.Bbox);
+        }
+
+
+        public static void __debug_CodeInfoWriteToConsole__(string methodName, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
+        {
+            Console.WriteLine($"[{DateTime.Now:HH:mm:dd.sss}] {Path.GetFileName(filePath)}:{lineNumber} - {methodName}");
+        }
+
+        private void __debug_MessageWriteToConsole__(string message, [CallerLineNumber] int lineNumber = 0, [CallerFilePath] string filePath = null)
+        {
+            Console.WriteLine($"[-]\t{DateTime.Now:HH:mm:ss.fff}\t-\t{Path.GetFileName(filePath)}:{lineNumber}\t" + message);
         }
 
     }
