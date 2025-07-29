@@ -38,7 +38,6 @@ namespace YoloPoseRun
         public int DeviceID = -2;
 
         BlockingCollection<string> videoSourceFilePathQueue;
-        string saveDirectoryPath = "";
 
         public YoloPoseRunClass(BlockingCollection<string> videoSourceFilePathQueue, string modelFilePath, int deviceID, string ConfidenceParameterLinesString)
         {
@@ -146,16 +145,14 @@ namespace YoloPoseRun
 
         }
 
-        string ProgressReport = "";
-
         private void dequeue_frameVideoReader(CancellationToken cancellationToken)
         {
             try
             {
+                ProcessRunCount = 0;
+
                 Stopwatch sw = new Stopwatch();
 
-                string ext = "";
-                ProcessRunCount = 0;
                 string videoSourceFilePath = "";
                 int videoSource_FrameCount = 0;
 
@@ -170,7 +167,7 @@ namespace YoloPoseRun
 
                         if (!File.Exists(videoSourceFilePath)) continue;
 
-                        saveDirectoryPath = Path.Combine(Path.GetDirectoryName(videoSourceFilePath), Path.GetFileNameWithoutExtension(videoSourceFilePath));
+                        string saveDirectoryPath = Path.Combine(Path.GetDirectoryName(videoSourceFilePath), Path.GetFileNameWithoutExtension(videoSourceFilePath));
                         Console.WriteLine($"/// masterDirectoryPath: {saveDirectoryPath}");
 
                         if (Directory.Exists(saveDirectoryPath))
@@ -180,21 +177,16 @@ namespace YoloPoseRun
                         else { Directory.CreateDirectory(saveDirectoryPath); }
 
                         Console.WriteLine($"/// capturePath: {videoSourceFilePath}");
-                        ext = Path.GetExtension(videoSourceFilePath);
+                        string ext = Path.GetExtension(videoSourceFilePath);
 
                         if (ext != ".mp4") { continue; }
-                        else
-                        {
-                            if (videoSource != null) { videoSource.Dispose(); targetFilename = ""; }
-                            videoSource = new VideoCapture(videoSourceFilePath);
-                            targetFilename = Path.GetFileNameWithoutExtension(videoSourceFilePath);
-                            videoSource_FrameCount = videoSource.FrameCount;
-                        }
 
+                        if (videoSource != null) { videoSource.Dispose(); }
+                        videoSource = new VideoCapture(videoSourceFilePath);
+                        videoSource_FrameCount = videoSource.FrameCount;
                         if (videoSource == null) continue;
 
                         int maxIndex = int.MinValue;
-
                         int frameIndex = 0;
                         videoSource.PosFrames = 0;
 
@@ -212,12 +204,8 @@ namespace YoloPoseRun
                                 if (frameList_Count >= PredictTaskBatchSize && frameList_Count > 0)
                                 {
                                     __debug_MessageWriteToConsole__($"TaskB\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
-
-                                    ProgressReport = $"{frameIndex} / {videoSource_FrameCount}";
                                     frameBitmapQueue.Add(frameList); qB += frameList.Count;
-
                                     __debug_MessageWriteToConsole__($"Add_B\t{frameList[0].frameIndex}\t{frameList.Count}\t-wait\t{sw.ElapsedMilliseconds}"); sw.Restart();
-
                                     frameList = new List<FrameDataSet>(PredictTaskBatchSize);
                                 }
 
@@ -234,7 +222,6 @@ namespace YoloPoseRun
                             }
                         }
 
-                        ProgressReport = $"{frameIndex} / {videoSource_FrameCount}";
                         Console.WriteLine($"Complete: {maxIndex} { System.Reflection.MethodBase.GetCurrentMethod().Name}");
                     }
                 }
@@ -453,7 +440,6 @@ namespace YoloPoseRun
             }
         }
 
-        string targetFilename = "";
 
         private void dequeue_frameReport()
         {
@@ -467,6 +453,7 @@ namespace YoloPoseRun
                 string saveDirectoryPath = "";
                 string pathPose = Path.Combine(saveDirectoryPath, "Pose.csv");
                 string linePose = "";
+                string targetFilename = "";
 
                 while (!frameReportQueue.IsCompleted)
                 {
@@ -480,11 +467,13 @@ namespace YoloPoseRun
                         {
                             if (saveDirectoryPath != frameInfo.saveDirectoryPath)
                             {
+
                                 if (PoseValue.Count > 0) File.AppendAllLines(pathPose, PoseValue);
                                 PoseValue.Clear();
 
                                 saveDirectoryPath = frameInfo.saveDirectoryPath;
                                 pathPose = Path.Combine(saveDirectoryPath, "Pose.csv");
+                                targetFilename = Path.GetFileName(saveDirectoryPath);
 
                                 if (!File.Exists(pathPose))
                                 {
@@ -612,7 +601,6 @@ namespace YoloPoseRun
                                 videoWriter.Write(mat3C);
                                 mat3C.Dispose();
                             }
-
                         }
 
                         __debug_MessageWriteToConsole__($"TaskV\t{frameList[0].frameIndex}\t{frameList.Count}\t-task\t{sw.ElapsedMilliseconds}"); sw.Restart();
