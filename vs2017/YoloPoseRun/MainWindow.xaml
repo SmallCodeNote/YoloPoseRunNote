@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:YoloPoseRun"
         mc:Ignorable="d"
-        Title="YoloPoseRun" Height="600" Width="600" Closing="Window_Closing" Loaded="Window_Loaded">
+        Title="YoloPoseRun" Height="600" Width="1024" Closing="Window_Closing" Loaded="Window_Loaded" PreviewKeyDown="Window_PreviewKeyDown">
     <TabControl x:Name="tabControl" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" TabStripPlacement="Bottom">
         <TabItem Header="Main">
     <DockPanel>
@@ -64,7 +64,7 @@
 
     </DockPanel>
         </TabItem>
-        <TabItem Header="Config">
+        <TabItem Header="Config" x:Name="tabItem_Config">
             <DockPanel DockPanel.Dock="Top" LastChildFill="True" Background="LightGray" Margin="0">
                 <DockPanel DockPanel.Dock="Top">
                     <Button DockPanel.Dock="Right" Padding="5,0,5,0" Content="get Default" Margin="3" x:Name="button_getDefaultConfidence" Click="Button_getDefaultConfidence_Click"/>
@@ -75,7 +75,60 @@
                 </DockPanel>
                 <Border Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"  CornerRadius="5"  Padding="0" Margin="3,3,3,3">
                     <DockPanel LastChildFill="True">
-                        <TextBox x:Name="textBox_initializeLinesString" BorderThickness="0" VerticalAlignment="Stretch" AcceptsReturn="True" Background="Transparent" VerticalContentAlignment="Top" Margin="3,3,3,3" Padding="5,0,0,0" FontSize="14" ToolTip="File List" VerticalScrollBarVisibility="Visible"/>
+                        <TextBox x:Name="textBox_initializeLinesString" DockPanel.Dock="Left" BorderThickness="0" VerticalAlignment="Stretch" AcceptsReturn="True" Background="Transparent" VerticalContentAlignment="Top" Margin="3,3,3,3" Padding="5,0,0,0" FontSize="14" ToolTip="File List" VerticalScrollBarVisibility="Visible" Width="250"/>
+                        <DockPanel LastChildFill="True">
+                            <DockPanel LastChildFill="True" DockPanel.Dock="Bottom" Background="Gray" HorizontalAlignment="Stretch">
+                                <ToolBarTray Background="White" DockPanel.Dock="Bottom" Height="30" HorizontalAlignment="Stretch">
+                                    <ToolBar Band="1" BandIndex="1">
+                                        <Button x:Name="button_LoadFile" Width="30" VerticalAlignment="Top" Content="📂" Click="button_LoadFile_Click" ToolTip="Load file" />
+                                    </ToolBar>
+                                    <ToolBar Band="1" BandIndex="2">
+                                        <Button x:Name="button_ReLoadFrame" 
+                                        Content="🔄" 
+                                        Click="button_ReLoadFrame_Click"
+                                        ToolTip="frame reLoad"
+                                        />
+
+                                        <Button x:Name="button_SkipBackFewFrames" 
+                                        Content="⏪" 
+                                        Click="button_SkipBackFewFrames_Click"
+                                        ToolTip="Skip back several frames"
+                                        />
+
+                                        <Button x:Name="button_PreviousFrame"
+                                        Content="⏴"
+                                        Click="button_PreviousFrame_Click"
+                                        ToolTip="Go to previous frame"
+                                        />
+
+                                        <Label x:Name="label_framePosition" Width="100" HorizontalContentAlignment="Center"/>
+                                        
+                                        <Button x:Name="button_NextFrame"
+                                        Content="⏵"
+                                        Click="button_NextFrame_Click"
+                                        ToolTip="Go to next frame"
+                                        />
+
+                                        <Button x:Name="button_SkipForwardFewFrames"
+                                        Content="⏩"
+                                        Click="button_SkipForwardFewFrames_Click"
+                                        ToolTip="Skip forward several frames"
+                                        />
+                                    </ToolBar>
+                                </ToolBarTray>
+                                <Slider x:Name="slider_frameIndex" ValueChanged="slider_frameIndex_ValueChanged"/>
+                            </DockPanel>
+                            <ScrollViewer x:Name="ImageScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Margin="3">
+                                <Grid>
+                                    <Image x:Name="image_DisplayedImage" RenderTransformOrigin="0.5,0.5">
+                                        <Image.LayoutTransform>
+                                            <ScaleTransform x:Name="ImageScaleTransform" ScaleX="1.0" ScaleY="1.0"/>
+                                        </Image.LayoutTransform>
+                                    </Image>
+                                    <Canvas x:Name="overlayCanvas" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5"/>
+                                </Grid>
+                            </ScrollViewer>
+                        </DockPanel>
                     </DockPanel>
                 </Border>
             </DockPanel>

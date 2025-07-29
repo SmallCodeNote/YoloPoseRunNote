@@ -273,7 +273,7 @@ namespace YoloPoseRun
             }
         }
 
-        public unsafe Tensor<float> ConvertBitmapToTensor(Bitmap bitmap, int width = 640, int height = 640)
+        public static unsafe Tensor<float> ConvertBitmapToTensor(Bitmap bitmap, int width = 640, int height = 640)
         {
             var tensor = new DenseTensor<float>(new[] { 1, 3, height, width });
             float[] tensorArray = tensor.Buffer.ToArray();
@@ -620,7 +620,7 @@ namespace YoloPoseRun
             }
         }
 
-        private void drawPose(Bitmap bitmap, List<PoseInfo> PoseInfos)
+        public static void drawPose(Bitmap bitmap, List<PoseInfo> PoseInfos)
         {
             using (Graphics g = Graphics.FromImage(bitmap))
             {
@@ -629,7 +629,7 @@ namespace YoloPoseRun
             }
         }
 
-        public void drawBBoxs(Graphics g, List<PoseInfo> PoseInfos)
+        public static void drawBBoxs(Graphics g, List<PoseInfo> PoseInfos)
         {
             if (g != null)
             {
@@ -640,7 +640,7 @@ namespace YoloPoseRun
             }
         }
 
-        public void drawBones(Graphics g, List<PoseInfo> PoseInfos)
+        public static void drawBones(Graphics g, List<PoseInfo> PoseInfos)
         {
             if (g != null)
             {

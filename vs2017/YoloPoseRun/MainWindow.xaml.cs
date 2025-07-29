@@ -6,14 +6,19 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
+using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.Win32;
+
+using OpenCvSharp;
+using OpenCvSharp.Extensions;
 
 using ControlValuesToStringClass;
 
 namespace YoloPoseRun
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : System.Windows.Window
     {
         YoloPoseRunManager progressManager;
 
@@ -144,7 +149,7 @@ namespace YoloPoseRun
         {
             if (int.TryParse(textBox.Text, out int batchSize) && batchSize > 0)
             {
-                yoloPose = new YoloPoseRunClass(srcFileQueue, textBox_modelFilePath.Text, deviceID,textBox_initializeLinesString.Text);
+                yoloPose = new YoloPoseRunClass(srcFileQueue, textBox_modelFilePath.Text, deviceID, textBox_initializeLinesString.Text);
                 yoloPose.PredictTaskBatchSize = batchSize;
                 task = yoloPose.Run(tokenSource.Token);
             }
@@ -224,12 +229,12 @@ namespace YoloPoseRun
 
         private void Button_getDefaultConfidence_Click(object sender, RoutedEventArgs e)
         {
-             YoloPoseModelHandle y = new YoloPoseModelHandle("");
-            PoseKeyPoints k = new PoseKeyPoints(null,-1,"");
+            YoloPoseModelHandle y = new YoloPoseModelHandle("");
+            PoseKeyPoints k = new PoseKeyPoints(null, -1, "");
             PoseInfo_ConfidenceLevel c = new PoseInfo_ConfidenceLevel();
             PoseInfo_OverLapThresholds o = new PoseInfo_OverLapThresholds();
 
-            textBox_initializeLinesString.Text = o.ParamToTextLinesString()+"\r\n"+ c.ParamToTextLinesString();
+            textBox_initializeLinesString.Text = o.ParamToTextLinesString() + "\r\n" + c.ParamToTextLinesString();
             y.Dispose();
         }
 
@@ -250,8 +255,202 @@ namespace YoloPoseRun
             string inifilepath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_Param.ini");
             File.WriteAllText(inifilepath, ControlValuesToString.GetString(this));
         }
+
+
+        VideoCapture capture;
+        string targetFilename = "";
+        int frameIndex = 0;
+
+        private void OpenMovieFile(string filePath)
+        {
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                Application.Current.Dispatcher.Invoke(() => OpenMovieFile(filePath));
+                return;
+            }
+
+            if (capture != null)
+            {
+                capture.Dispose();
+                targetFilename = "";
+            }
+
+            string ext = System.IO.Path.GetExtension(filePath);
+            if (string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase))
+            {
+                targetFilename = System.IO.Path.GetFileNameWithoutExtension(filePath);
+                capture = new VideoCapture(filePath);
+
+                slider_frameIndex.Maximum = capture.FrameCount;
+                slider_frameIndex.Value = 0;
+                ShowFrame(0);
+            }
+        }
+
+        private void slider_frameIndex_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            frameIndex = (int)e.NewValue;
+            ShowFrame(frameIndex);
+        }
+
+        private void ShowFrame(int frameIndex)
+        {
+            if (!Application.Current.Dispatcher.CheckAccess())
+            {
+                Application.Current.Dispatcher.Invoke(() => ShowFrame(frameIndex));
+                return;
+            }
+
+            if (capture == null || !capture.IsOpened()) return;
+
+            capture.Set(VideoCaptureProperties.PosFrames, frameIndex);
+
+            using (var frame = new Mat())
+            {
+
+                if (capture.Read(frame) && !frame.Empty())
+                {
+                    string ConfidenceParameterLinesString = textBox_initializeLinesString.Text;
+                    string modelFilePath = textBox_modelFilePath.Text;
+                    int deviceID = 0;
+
+                    var ConfidenceLevelSetting = new PoseInfo_ConfidenceLevel(ConfidenceParameterLinesString);
+                    var OverLapThresholdsSetting = new PoseInfo_OverLapThresholds(ConfidenceParameterLinesString);
+                    var yoloPoseModelHandle = new YoloPoseModelHandle(modelFilePath, ConfidenceLevelSetting, OverLapThresholdsSetting, deviceID);
+
+                    var bitmap = BitmapConverter.ToBitmap(frame);
+                    Tensor<float> tensor = YoloPoseRunClass.ConvertBitmapToTensor(bitmap);
+                    var inputs = yoloPoseModelHandle.GetInputs(tensor);
+                    var results = yoloPoseModelHandle.PredicteResults(inputs);
+                    var poseInfos = yoloPoseModelHandle.PoseInfoRead(results);
+                    YoloPoseRunClass.drawPose(bitmap, poseInfos);
+
+                    var hBitmap = bitmap.GetHbitmap();
+                    System.Windows.Media.Imaging.BitmapSource bitmapSrc = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+                                            hBitmap,
+                                            IntPtr.Zero,
+                                            Int32Rect.Empty,
+                                            System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+
+                    bitmapSrc.Freeze();
+                    image_DisplayedImage.Source = bitmapSrc;
+
+                    results.Dispose();
+                    bitmap.Dispose();
+                    yoloPoseModelHandle.Dispose();
+
+                }
+
+            }
+
+            if (slider_frameIndex.Value != frameIndex) { slider_frameIndex.Value = frameIndex; }
+
+            this.frameIndex = frameIndex;
+
+            label_framePosition.Content = $"{frameIndex} / {slider_frameIndex.Maximum}";
+
+        }
+
+        private void button_LoadFile_Click(object sender, RoutedEventArgs e)
+        {
+            OpenFileDialog ofd = new OpenFileDialog();
+            ofd.Filter = "MP4|*.mp4";
+            ofd.FilterIndex = 0;
+            if (ofd.ShowDialog() != true) return;
+
+            OpenMovieFile(ofd.FileName);
+        }
+
+        private void frameIndexShift(int shiftValue)
+        {
+            if (capture == null) return;
+
+            int targetIndex = frameIndex + shiftValue;
+            if (targetIndex < 0) targetIndex = 0;
+            if (targetIndex >= (int)slider_frameIndex.Maximum) targetIndex = (int)slider_frameIndex.Maximum - 1;
+
+            slider_frameIndex.Value = targetIndex;
+
+        }
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (tabItem_Config.IsSelected)
+            {
+                if (e.Key == Key.F5)
+                {
+                    ShowFrame((int)slider_frameIndex.Value);
+                    e.Handled = true;
+                }
+
+                if (e.Key == Key.Left)
+                {
+                    if (Keyboard.Modifiers == ModifierKeys.Control)
+                    {
+                        frameIndexShift(-5); e.Handled = true;
+                    }
+                    else if (Keyboard.Modifiers == ModifierKeys.Alt)
+                    {
+                        frameIndexShift(-1); e.Handled = true;
+                    }
+
+                }
+                if (e.Key == Key.Right)
+                {
+                    if (Keyboard.Modifiers == ModifierKeys.Control)
+                    {
+                        frameIndexShift(5); e.Handled = true;
+                    }
+                    else if (Keyboard.Modifiers == ModifierKeys.Alt)
+                    {
+                        frameIndexShift(1); e.Handled = true;
+                    }
+
+                }
+
+                if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt && e.SystemKey == Key.Right)
+                {
+                    frameIndexShift(1);
+                    e.Handled = true;
+                }
+
+                if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt && e.SystemKey == Key.Left)
+                {
+                    frameIndexShift(-1);
+                    e.Handled = true;
+                }
+
+            }
+        }
+
+        private void button_SkipBackFewFrames_Click(object sender, RoutedEventArgs e)
+        {
+            frameIndexShift(-5);
+        }
+
+        private void button_PreviousFrame_Click(object sender, RoutedEventArgs e)
+        {
+            frameIndexShift(-1);
+        }
+
+        private void button_NextFrame_Click(object sender, RoutedEventArgs e)
+        {
+            frameIndexShift(1);
+        }
+
+        private void button_SkipForwardFewFrames_Click(object sender, RoutedEventArgs e)
+        {
+            frameIndexShift(5);
+        }
+
+        private void button_ReLoadFrame_Click(object sender, RoutedEventArgs e)
+        {
+            ShowFrame((int)slider_frameIndex.Value);
+        }
+
+
     }
 
-    
-
 }
+
+
